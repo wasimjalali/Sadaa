@@ -33,4 +33,14 @@ import Testing
         #expect(recognizer.handle(.rightOptionDown(at: 12.0)) == false)
         #expect(recognizer.handle(.rightOptionUp(at: 12.1)) == true)
     }
+
+    // A combo invalidates only its own down/up window; the next clean tap fires.
+    @Test func testFreshTapAfterInvalidatedComboFires() {
+        var recognizer = RightOptionTapRecognizer()
+        #expect(recognizer.handle(.rightOptionDown(at: 10.0)) == false)
+        #expect(recognizer.handle(.otherKeyDown) == false)
+        #expect(recognizer.handle(.rightOptionUp(at: 10.1)) == false)
+        #expect(recognizer.handle(.rightOptionDown(at: 12.0)) == false)
+        #expect(recognizer.handle(.rightOptionUp(at: 12.1)) == true)
+    }
 }
