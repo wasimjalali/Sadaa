@@ -97,6 +97,28 @@ import Foundation
             #expect(status == 401)
         }
     }
+
+    @Test func testDeadlineThrowsTimedOut() async {
+        do {
+            _ = try await AzureOpenAIProvider.withDeadline(seconds: 0.05) {
+                try await Task.sleep(nanoseconds: 500_000_000)
+                return 1
+            }
+            Issue.record("expected ProviderError.timedOut")
+        } catch let error as ProviderError {
+            guard case .timedOut = error else {
+                Issue.record("wrong ProviderError case: \(error)")
+                return
+            }
+        } catch {
+            Issue.record("wrong error type: \(error)")
+        }
+    }
+
+    @Test func testDeadlineReturnsResultWhenFast() async throws {
+        let value = try await AzureOpenAIProvider.withDeadline(seconds: 1.0) { 42 }
+        #expect(value == 42)
+    }
 }
 
 /// URLProtocol stub so provider tests never touch the network.

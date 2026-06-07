@@ -2,6 +2,7 @@ import Foundation
 
 /// Azure OpenAI batch transcription. Spec section 3.2.
 /// POST {endpoint}/openai/deployments/{deployment}/audio/transcriptions?api-version=...
+/// @unchecked Sendable: no mutable state; both stored properties (Config, URLSession) are Sendable.
 public final class AzureOpenAIProvider: TranscriptionProvider, @unchecked Sendable {
     public struct Config: Sendable {
         public let endpoint: URL
@@ -54,8 +55,33 @@ public final class AzureOpenAIProvider: TranscriptionProvider, @unchecked Sendab
         request.setValue(config.apiKey, forHTTPHeaderField: "api-key")
         request.setValue(body.contentType, forHTTPHeaderField: "Content-Type")
         request.httpBody = body.encoded()
-        request.timeoutInterval = 15 // spec 3.5: fallback timeout
+        request.timeoutInterval = 15 // idle timeout; total deadline enforced in transcribe()
         return request
+    }
+
+    /// Wall-clock deadline for one provider attempt. Spec 3.5: the fallback
+    /// chain moves on after 15 seconds.
+    static let totalDeadline: TimeInterval = 15
+
+    /// Races work against a wall-clock deadline. URLRequest.timeoutInterval is
+    /// an IDLE timeout (resets on every byte), so a slow trickling upload can
+    /// exceed it indefinitely; this enforces a true total cap.
+    static func withDeadline<T: Sendable>(
+        seconds: TimeInterval,
+        _ work: @escaping @Sendable () async throws -> T
+    ) async throws -> T {
+        try await withThrowingTaskGroup(of: T.self) { group in
+            group.addTask { try await work() }
+            group.addTask {
+                try await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))
+                throw ProviderError.timedOut
+            }
+            guard let result = try await group.next() else {
+                throw ProviderError.timedOut
+            }
+            group.cancelAll()
+            return result
+        }
     }
 
     public func transcribe(audio: URL,
@@ -63,7 +89,16 @@ public final class AzureOpenAIProvider: TranscriptionProvider, @unchecked Sendab
         let audioData = try Data(contentsOf: audio)
         let request = try makeRequest(audio: audioData,
                                       filename: audio.lastPathComponent, hint: hint)
-        let (data, response) = try await session.data(for: request)
+        let (data, response): (Data, URLResponse)
+        do {
+            (data, response) = try await Self.withDeadline(seconds: Self.totalDeadline) { [session] in
+                try await session.data(for: request)
+            }
+        } catch let urlError as URLError where urlError.code == .timedOut {
+            throw ProviderError.timedOut
+        } catch let urlError as URLError {
+            throw ProviderError.transport(urlError)
+        }
         guard let http = response as? HTTPURLResponse else {
             throw ProviderError.badResponse
         }

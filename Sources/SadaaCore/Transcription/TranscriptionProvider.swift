@@ -26,6 +26,8 @@ public enum ProviderError: Error {
     case http(Int, String)
     case badResponse
     case notConfigured(String)
+    case timedOut
+    case transport(URLError)
 }
 
 public protocol TranscriptionProvider: Sendable {
