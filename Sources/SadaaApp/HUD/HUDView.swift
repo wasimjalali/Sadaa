@@ -11,10 +11,6 @@ enum HUDDisplay: Equatable {
 struct HUDView: View {
     let display: HUDDisplay
 
-    private static let navy = Color(red: 0x1E / 255, green: 0x3A / 255, blue: 0x5F / 255)
-    private static let gold = Color(red: 0xD4 / 255, green: 0xA8 / 255, blue: 0x53 / 255)
-    private static let cream = Color(red: 0xFA / 255, green: 0xF7 / 255, blue: 0xF2 / 255)
-
     var body: some View {
         HStack(spacing: 10) {
             switch display {
@@ -22,28 +18,28 @@ struct HUDView: View {
                 LevelBars(level: level)
                 Text(timeString(seconds))
                     .font(.system(.body, design: .monospaced))
-                    .foregroundStyle(Self.cream)
+                    .foregroundStyle(Theme.cream)
                 Text("Esc to cancel")
                     .font(.caption)
-                    .foregroundStyle(Self.cream.opacity(0.55))
+                    .foregroundStyle(Theme.cream.opacity(0.55))
             case .transcribing:
-                ProgressView().controlSize(.small).tint(Self.gold)
-                Text("Transcribing…").foregroundStyle(Self.cream)
+                ProgressView().controlSize(.small).tint(Theme.gold)
+                Text("Transcribing…").foregroundStyle(Theme.cream)
             case .delivering:
-                ProgressView().controlSize(.small).tint(Self.gold)
-                Text("Inserting…").foregroundStyle(Self.cream)
+                ProgressView().controlSize(.small).tint(Theme.gold)
+                Text("Inserting…").foregroundStyle(Theme.cream)
             case .error(let message):
                 Image(systemName: "exclamationmark.triangle.fill")
-                    .foregroundStyle(Self.gold)
+                    .foregroundStyle(Theme.gold)
                 Text(message)
-                    .foregroundStyle(Self.cream)
+                    .foregroundStyle(Theme.cream)
                     .lineLimit(2)
             }
         }
         .padding(.horizontal, 18)
         .padding(.vertical, 12)
         .frame(minWidth: 220, maxWidth: 380)
-        .background(Self.navy.opacity(0.96), in: Capsule())
+        .background(Theme.navy.opacity(0.96), in: Capsule())
         .overlay(Capsule().strokeBorder(.white.opacity(0.08)))
     }
 
@@ -55,14 +51,13 @@ struct HUDView: View {
 /// Five gold bars that scale with the mic level, Sadaa logo style.
 private struct LevelBars: View {
     let level: Float
-    private static let gold = Color(red: 0xD4 / 255, green: 0xA8 / 255, blue: 0x53 / 255)
     private let weights: [CGFloat] = [0.4, 0.7, 1.0, 0.7, 0.4]
 
     var body: some View {
         HStack(spacing: 3) {
             ForEach(weights.indices, id: \.self) { index in
                 Capsule()
-                    .fill(Self.gold)
+                    .fill(Theme.gold)
                     .frame(width: 4,
                            height: 6 + 22 * weights[index]
                                    * CGFloat(min(max(level * 12, 0.15), 1)))
