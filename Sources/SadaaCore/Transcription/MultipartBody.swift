@@ -13,6 +13,7 @@ public struct MultipartBody {
         "multipart/form-data; boundary=\(boundary)"
     }
 
+    /// NOTE: callers are responsible for keeping CRLF sequences out of values.
     public mutating func addField(name: String, value: String) {
         append("--\(boundary)\r\n")
         append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n")

@@ -19,4 +19,13 @@ import Foundation
         #expect(encoded.contains("Content-Type: audio/wav\r\n"))
         #expect(encoded.hasSuffix("--BOUNDARY--\r\n"))
     }
+
+    @Test func testNonASCIIFieldValue() {
+        var body = MultipartBody(boundary: "B")
+        body.addField(name: "prompt", value: "Ü, straße")
+        let data = body.encoded()
+        #expect(String(decoding: data, as: UTF8.self).contains("Ü, straße"))
+        let needle = Data("Ü, straße".utf8)
+        #expect(data.range(of: needle) != nil)
+    }
 }
