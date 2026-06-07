@@ -52,6 +52,13 @@ final class HotkeyManager {
         runLoopSource = nil
     }
 
+    deinit {
+        // The CGEventTap holds an unretained pointer back to self. If this
+        // object is freed without stop(), the live tap would call back into
+        // freed memory (use-after-free). stop() is idempotent.
+        stop()
+    }
+
     private func handle(type: CGEventType,
                         event: CGEvent) -> Unmanaged<CGEvent>? {
         // macOS disables taps that stall; re-enable and move on.
