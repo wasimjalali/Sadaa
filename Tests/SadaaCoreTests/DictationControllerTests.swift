@@ -33,6 +33,7 @@ struct FakeProvider: TranscriptionProvider {
     private let recorder: FakeRecorder
     private var delivered: [String] = []
     private var states: [DictationState] = []
+    private var records: [DictationRecord] = []
 
     init() throws {
         dir = FileManager.default.temporaryDirectory
@@ -41,6 +42,7 @@ struct FakeProvider: TranscriptionProvider {
         recorder = FakeRecorder()
         delivered = []
         states = []
+        records = []
     }
 
     deinit {
@@ -55,7 +57,8 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) }
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) }
         )
         controller.onStateChange = { [weak self] state in
             self?.states.append(state)
@@ -81,6 +84,10 @@ struct FakeProvider: TranscriptionProvider {
         let sidecar = recorder.startedURL!
             .deletingPathExtension().appendingPathExtension("txt")
         #expect(try String(contentsOf: sidecar, encoding: .utf8) == "hello world")
+
+        #expect(records.count == 1)
+        #expect(records.first?.text == "hello world")
+        #expect(records.first?.provider == "fake")
     }
 
     @Test func testFallbackChain() async throws {

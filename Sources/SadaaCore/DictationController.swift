@@ -23,6 +23,7 @@ public final class DictationController {
     private let hint: () -> TranscriptionHint
     private let recordingsToKeep: Int
     private let deliver: (String) -> Void
+    private let record: (DictationRecord) -> Void
     private var processingTask: Task<Void, Never>?
 
     public init(recorder: AudioRecording,
@@ -30,13 +31,15 @@ public final class DictationController {
                 store: RecordingStore,
                 hint: @escaping () -> TranscriptionHint,
                 recordingsToKeep: Int,
-                deliver: @escaping (String) -> Void) {
+                deliver: @escaping (String) -> Void,
+                record: @escaping (DictationRecord) -> Void = { _ in }) {
         self.recorder = recorder
         self.providers = providers
         self.store = store
         self.hint = hint
         self.recordingsToKeep = recordingsToKeep
         self.deliver = deliver
+        self.record = record
         self.recorder.onAutoStop = { [weak self] in
             DispatchQueue.main.async { self?.toggle() }
         }
@@ -95,11 +98,13 @@ public final class DictationController {
         }
 
         var transcript: Transcript?
+        var usedProvider: String?
         var lastError: Error?
         for provider in chain {
             do {
                 transcript = try await provider.transcribe(audio: audioURL,
                                                             hint: hint())
+                usedProvider = provider.name
                 break
             } catch {
                 lastError = error
@@ -114,6 +119,13 @@ public final class DictationController {
         }
 
         try? store.saveTranscript(transcript.text, for: audioURL)
+
+        record(DictationRecord(
+            text: transcript.text,
+            createdAt: Date(),
+            language: transcript.detectedLanguage,
+            provider: usedProvider ?? "unknown",
+            durationSeconds: transcript.durationSeconds))
 
         state = .delivering
         deliver(transcript.text)
