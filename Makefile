@@ -25,10 +25,18 @@ bundle: build
 	mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	cp bundle/Info.plist $(APP)/Contents/Info.plist
 	cp .build/release/SadaaApp $(APP)/Contents/MacOS/Sadaa
+	cp assets/branding/Sadaa.icns $(APP)/Contents/Resources/Sadaa.icns
 	codesign --force --deep --sign - $(APP)
 
 run: bundle
 	open $(APP)
+
+# Install into /Applications and (re)launch so it appears in Finder.
+install: bundle
+	pkill -x Sadaa || true
+	rm -rf /Applications/Sadaa.app
+	cp -R $(APP) /Applications/Sadaa.app
+	open /Applications/Sadaa.app
 
 clean:
 	rm -rf .build dist
