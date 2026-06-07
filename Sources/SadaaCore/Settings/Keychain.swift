@@ -9,17 +9,30 @@ public enum KeychainError: Error {
 public enum Keychain {
     private static let service = "ai.karko.sadaa"
 
+    /// Upsert via SecItemUpdate-then-SecItemAdd so the stored key can't be
+    /// lost between a delete and an add.
+    /// Deliberately no kSecAttrAccessible / data-protection keychain: those
+    /// are iOS semantics; on macOS file-based login keychains the attribute
+    /// is ignored, and opting into the data-protection keychain would need
+    /// entitlements an ad-hoc-signed app doesn't have.
     public static func set(_ value: String, account: String) throws {
-        delete(account: account)
+        let data = Data(value.utf8)
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
             kSecAttrAccount as String: account,
-            kSecValueData as String: Data(value.utf8),
         ]
-        let status = SecItemAdd(query as CFDictionary, nil)
-        guard status == errSecSuccess else {
-            throw KeychainError.unexpectedStatus(status)
+        let update: [String: Any] = [kSecValueData as String: data]
+        let updateStatus = SecItemUpdate(query as CFDictionary, update as CFDictionary)
+        if updateStatus == errSecItemNotFound {
+            var add = query
+            add[kSecValueData as String] = data
+            let addStatus = SecItemAdd(add as CFDictionary, nil)
+            guard addStatus == errSecSuccess else {
+                throw KeychainError.unexpectedStatus(addStatus)
+            }
+        } else if updateStatus != errSecSuccess {
+            throw KeychainError.unexpectedStatus(updateStatus)
         }
     }
 
@@ -32,6 +45,9 @@ public enum Keychain {
             kSecMatchLimit as String: kSecMatchLimitOne,
         ]
         var result: AnyObject?
+        /// Returns nil both when the item doesn't exist and on any other
+        /// SecItemCopyMatching failure; callers treat all of those as
+        /// "not configured".
         guard SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess,
               let data = result as? Data else { return nil }
         return String(data: data, encoding: .utf8)
