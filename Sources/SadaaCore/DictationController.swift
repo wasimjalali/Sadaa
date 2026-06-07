@@ -10,6 +10,7 @@ public enum DictationState: Equatable, Sendable {
 
 /// The dictation pipeline state machine. Spec section 4 data flow and
 /// section 5 error rules. UI-agnostic: state changes surface via callback.
+@MainActor
 public final class DictationController {
     public private(set) var state: DictationState = .idle {
         didSet { onStateChange?(state) }
@@ -48,6 +49,7 @@ public final class DictationController {
         case .idle, .error:
             startRecording()
         case .recording:
+            state = .transcribing   // synchronous: a racing toggle now sees .transcribing and is ignored
             processingTask = Task { await stopAndProcess() }
         case .transcribing, .delivering:
             break // busy; ignore to avoid double-processing
@@ -85,7 +87,7 @@ public final class DictationController {
             return
         }
 
-        state = .transcribing
+        // state is already .transcribing (set synchronously in toggle())
         let chain = providers()
         guard !chain.isEmpty else {
             state = .error("No transcription provider configured. Open Settings.")

@@ -27,7 +27,7 @@ struct FakeProvider: TranscriptionProvider {
     }
 }
 
-@Suite final class DictationControllerTests {
+@Suite @MainActor final class DictationControllerTests {
     private let dir: URL
     private let store: RecordingStore
     private let recorder: FakeRecorder
