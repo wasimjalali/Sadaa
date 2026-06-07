@@ -43,6 +43,11 @@ struct TextInserter {
     }
 
     private func synthesizePaste() -> Bool {
+        // Posting a synthetic keystroke needs Accessibility trust; an untrusted
+        // process has its events silently dropped. Gate here so deliver() reports
+        // .clipboardOnly (and the HUD shows the manual-paste hint) instead of
+        // falsely claiming .pasted while nothing lands.
+        guard AXIsProcessTrusted() else { return false }
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let keyDown = CGEvent(keyboardEventSource: source,
                                     virtualKey: 9, keyDown: true),  // V
