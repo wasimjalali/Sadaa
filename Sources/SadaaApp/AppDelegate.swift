@@ -9,7 +9,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let hotkeys = HotkeyManager()
     private let hud = HUDPanel()
     private let inserter = TextInserter()
-    private let settingsWindow = SettingsWindowController()
+    private let mainWindow = MainWindowController()
+    private var viewModel: SadaaViewModel?
+    private var history: DictationHistory?
     private var controller: DictationController?
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
@@ -22,6 +24,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         setUpController()
         requestPermissions()
         startHotkeys()
+        if let viewModel {
+            mainWindow.show(viewModel: viewModel, settings: settings)
+        }
+    }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication,
+                                       hasVisibleWindows flag: Bool) -> Bool {
+        openMainWindow()
+        return true
     }
 
     // MARK: - Wiring
@@ -31,12 +42,25 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         recorder.onLevel = { [weak self] level in
             DispatchQueue.main.async { self?.currentLevel = level }
         }
-        let appSupport = FileManager.default.urls(
+        let sadaaDir = FileManager.default.urls(
             for: .applicationSupportDirectory, in: .userDomainMask)[0]
-            .appendingPathComponent("Sadaa/Recordings")
+            .appendingPathComponent("Sadaa")
+        let appSupport = sadaaDir.appendingPathComponent("Recordings")
         guard let store = try? RecordingStore(directory: appSupport) else {
             fatalError("Cannot create recordings directory at \(appSupport.path)")
         }
+
+        try? FileManager.default.createDirectory(
+            at: sadaaDir, withIntermediateDirectories: true)
+        let history = DictationHistory(
+            fileURL: sadaaDir.appendingPathComponent("history.json"))
+        self.history = history
+
+        let viewModel = SadaaViewModel(
+            settings: settings,
+            history: history,
+            onToggle: { [weak self] in self?.controller?.toggle() })
+        self.viewModel = viewModel
 
         let controller = DictationController(
             recorder: recorder,
@@ -53,10 +77,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self?.hud.show(.error("Copied. Press Cmd-V to paste."))
                     self?.hud.hide(after: 4)
                 }
+            },
+            record: { [weak self] record in
+                self?.history?.append(record)
+                self?.viewModel?.refreshRecent()
             }
         )
         controller.onStateChange = { [weak self] state in
             self?.render(state: state)
+            self?.viewModel?.refreshState(state)
         }
         self.controller = controller
     }
@@ -178,6 +207,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                                      accessibilityDescription: "Sadaa")
         let menu = NSMenu()
 
+        let openItem = NSMenuItem(title: "Open Sadaa",
+                                  action: #selector(openMainWindow),
+                                  keyEquivalent: "")
+        openItem.target = self
+        menu.addItem(openItem)
+        menu.addItem(.separator())
+
         let toggleItem = NSMenuItem(title: "Start/Stop Dictation (Right Option)",
                                     action: #selector(menuToggle),
                                     keyEquivalent: "")
@@ -203,7 +239,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(languageItem)
 
         let settingsItem = NSMenuItem(title: "Settings…",
-                                      action: #selector(openSettings),
+                                      action: #selector(openMainWindow),
                                       keyEquivalent: ",")
         settingsItem.target = self
         menu.addItem(settingsItem)
@@ -227,8 +263,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         sender.state = .on
     }
 
-    @objc private func openSettings() {
-        settingsWindow.show(settings: settings)
+    @objc private func openMainWindow() {
+        if let viewModel {
+            mainWindow.show(viewModel: viewModel, settings: settings)
+        }
     }
 
     // MARK: - Permissions
