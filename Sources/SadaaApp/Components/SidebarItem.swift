@@ -16,12 +16,13 @@ struct SidebarItem: View {
                 .font(.system(size: 13, weight: isSelected ? .semibold : .regular))
             Spacer(minLength: 0)
         }
-        .foregroundStyle(isSelected ? Theme.gold : Theme.cream.opacity(0.7))
+        .foregroundStyle(isSelected ? Theme.navy : Theme.cream.opacity(0.75))
         .padding(.horizontal, 12)
         .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(
             RoundedRectangle(cornerRadius: 8)
-                .fill(isSelected ? Theme.gold.opacity(0.12) : .clear)
+                .fill(isSelected ? Theme.gold : Color.clear)
         )
         .contentShape(RoundedRectangle(cornerRadius: 8))
     }

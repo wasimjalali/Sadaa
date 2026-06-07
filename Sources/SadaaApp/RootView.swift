@@ -43,30 +43,35 @@ struct RootView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.cream)
         }
+        // Sadaa wears a fixed light cream/navy brand. Pin the window to the
+        // light scheme so default text resolves dark and stays readable on
+        // cream even when macOS is in Dark Mode.
+        .preferredColorScheme(.light)
     }
 
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Plain buttons, not List(selection:), so the selection is our own gold
+        // pill rather than the macOS system-accent highlight.
+        VStack(alignment: .leading, spacing: 4) {
             brand
-            List(selection: $selection) {
-                ForEach(SidebarSection.allCases) { section in
+            ForEach(SidebarSection.allCases) { section in
+                Button {
+                    selection = section
+                } label: {
                     SidebarItem(
                         title: section.title,
                         systemImage: section.systemImage,
                         isSelected: selection == section
                     )
-                    .tag(section)
-                    .listRowInsets(EdgeInsets(top: 2, leading: 8, bottom: 2, trailing: 8))
-                    .listRowBackground(Color.clear)
-                    .listRowSeparator(.hidden)
                 }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 8)
             }
-            .scrollContentBackground(.hidden)
-            .listStyle(.sidebar)
+            Spacer(minLength: 0)
         }
-        .frame(minWidth: 200)
+        .frame(minWidth: 200, maxHeight: .infinity, alignment: .top)
         .background(Theme.navy)
     }
 

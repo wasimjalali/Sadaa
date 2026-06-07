@@ -53,6 +53,8 @@ struct SettingsPage: View {
                 }
                 .formStyle(.grouped)
                 .scrollContentBackground(.hidden)
+                .foregroundStyle(Theme.charcoal)
+                .tint(Theme.navy)
                 .frame(maxWidth: 560)
             }
             .padding(32)
