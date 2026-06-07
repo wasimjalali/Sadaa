@@ -3,3 +3,6 @@ dist/
 *.xcodeproj
 .DS_Store
 *.wav
+*.m4a
+*.aac
+*.flac
