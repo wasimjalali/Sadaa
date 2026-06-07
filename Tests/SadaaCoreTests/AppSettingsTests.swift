@@ -8,6 +8,7 @@ import Foundation
 
     init() {
         defaults = UserDefaults(suiteName: "ai.karko.sadaa.tests")!
+        // Clear persisted state before constructing settings so tests start clean.
         defaults.removePersistentDomain(forName: "ai.karko.sadaa.tests")
         settings = AppSettings(defaults: defaults)
     }
@@ -25,8 +26,12 @@ import Foundation
         settings.azureEndpoint = "https://myres.openai.azure.com"
         settings.azureDeployment = "whisper"
         settings.languagePin = .de
+        settings.silenceTimeout = 45.5
+        settings.recordingsToKeep = 5
         #expect(settings.azureEndpoint == "https://myres.openai.azure.com")
         #expect(settings.azureDeployment == "whisper")
         #expect(settings.languagePin == .de)
+        #expect(settings.silenceTimeout == 45.5)
+        #expect(settings.recordingsToKeep == 5)
     }
 }
