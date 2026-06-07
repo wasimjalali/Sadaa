@@ -12,6 +12,7 @@ public protocol AudioRecording: AnyObject {
 public enum AudioRecorderError: Error {
     case notRecording
     case formatUnsupported
+    case alreadyRecording
 }
 
 /// AVAudioEngine capture -> 16kHz mono Int16 WAV. UI-facing callbacks fire
@@ -29,6 +30,10 @@ public final class AudioRecorder: AudioRecording {
     private var fileURL: URL?
     private var watchdog: SilenceWatchdog
     private var startedAt: Date?
+    /// Latch so onAutoStop fires at most once per session. Mutated only on the
+    /// single AVAudioEngine tap thread (after start() assigns state before the
+    /// tap is installed), so no synchronization is needed.
+    private var autoStopFired = false
     private let silenceTimeout: TimeInterval
     /// Hard cap on recording length. Spec section 8: 10 minutes.
     private let maxDuration: TimeInterval
@@ -50,6 +55,7 @@ public final class AudioRecorder: AudioRecording {
     }
 
     public func start(to url: URL) throws {
+        guard fileURL == nil else { throw AudioRecorderError.alreadyRecording }
         let input = engine.inputNode
         let hwFormat = input.outputFormat(forBus: 0)
         guard let targetFormat = AVAudioFormat(commonFormat: .pcmFormatInt16,
@@ -69,9 +75,12 @@ public final class AudioRecorder: AudioRecording {
         }
         if let writerError { throw writerError }
 
+        // Assign all session state BEFORE installing the tap so the tap thread
+        // never observes stale watchdog/startedAt/latch from a prior session.
         fileURL = url
         watchdog = SilenceWatchdog(timeout: silenceTimeout)
         startedAt = Date()
+        autoStopFired = false
 
         input.installTap(onBus: 0, bufferSize: 4096, format: hwFormat) {
             [weak self] buffer, _ in
@@ -79,15 +88,29 @@ public final class AudioRecorder: AudioRecording {
                           targetFormat: targetFormat)
         }
         engine.prepare()
-        try engine.start()
+        do {
+            try engine.start()
+        } catch {
+            // engine.start() failed after the tap and writer were created. Remove
+            // the tap and tear down the half-created writer before rethrowing so
+            // the recorder is left in a clean, restartable state.
+            engine.inputNode.removeTap(onBus: 0)
+            writerQueue.sync { try? writer?.finish() }
+            if let url = fileURL { try? FileManager.default.removeItem(at: url) }
+            writer = nil
+            fileURL = nil
+            startedAt = nil
+            throw error
+        }
     }
 
     public func stop() throws -> URL {
         guard let url = fileURL else { throw AudioRecorderError.notRecording }
         teardownEngine()
-        // Finish synchronously on the writer queue so any in-flight appends
-        // already enqueued by the tap run first and the file is fully flushed
-        // before we return the URL.
+        // Appends enqueued before teardown drain on the serial queue before this
+        // sync finish. A buffer still mid-process when the tap is removed may
+        // enqueue after finish(); that tail (a few ms) is dropped, which is fine
+        // for dictation.
         var finishError: Error?
         writerQueue.sync {
             do {
@@ -134,7 +157,9 @@ public final class AudioRecorder: AudioRecording {
         onLevel?(rms)
 
         let elapsed = Date().timeIntervalSince(startedAt ?? Date())
-        if watchdog.observe(rms: rms, at: elapsed) || elapsed > maxDuration {
+        if !autoStopFired,
+           watchdog.observe(rms: rms, at: elapsed) || elapsed > maxDuration {
+            autoStopFired = true
             onAutoStop?()
         }
 
