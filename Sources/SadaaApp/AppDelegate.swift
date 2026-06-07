@@ -15,6 +15,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingSeconds = 0
     private var currentLevel: Float = 0
     private var recordingActive = false
+    private var axPollTimer: Timer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
@@ -81,11 +82,34 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         hotkeys.isRecordingActive = { [weak self] in
             self?.recordingActive ?? false
         }
+
+        if tryStartHotkeys() { return }
+
+        // Not Accessibility-trusted yet. Poll until the user grants it, then
+        // start the tap without requiring a relaunch.
+        hud.show(.error("Enable Accessibility for Sadaa in System Settings to use the hotkey."))
+        hud.hide(after: 6)
+        axPollTimer?.invalidate()
+        axPollTimer = Timer.scheduledTimer(withTimeInterval: 2.0,
+                                           repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                guard AXIsProcessTrusted() else { return }
+                if self.tryStartHotkeys() {
+                    self.axPollTimer?.invalidate()
+                    self.axPollTimer = nil
+                }
+            }
+        }
+    }
+
+    /// Attempts to start the global hotkey tap. Returns true on success.
+    private func tryStartHotkeys() -> Bool {
         do {
             try hotkeys.start()
+            return true
         } catch {
-            hud.show(.error("Enable Accessibility for Sadaa in System Settings."))
-            hud.hide(after: 6)
+            return false
         }
     }
 
