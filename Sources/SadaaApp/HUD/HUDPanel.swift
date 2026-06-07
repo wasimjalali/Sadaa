@@ -3,6 +3,7 @@ import SwiftUI
 
 /// Borderless, non-activating floating panel at the bottom-center of the
 /// active screen. Never steals focus from the app being dictated into.
+@MainActor
 final class HUDPanel {
     private var panel: NSPanel?
     private var hosting: NSHostingView<HUDView>?
@@ -34,7 +35,7 @@ final class HUDPanel {
         guard let panel, let hosting else { return }
         hosting.layout()
         let size = hosting.fittingSize
-        let screen = NSScreen.main ?? NSScreen.screens[0]
+        let screen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens[0]
         let frame = screen.visibleFrame
         panel.setFrame(NSRect(x: frame.midX - size.width / 2,
                               y: frame.minY + 100,
@@ -52,7 +53,7 @@ final class HUDPanel {
         }
         hideTimer = Timer.scheduledTimer(withTimeInterval: delay,
                                          repeats: false) { [weak self] _ in
-            self?.panel?.orderOut(nil)
+            MainActor.assumeIsolated { self?.panel?.orderOut(nil) }
         }
     }
 }
