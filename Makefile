@@ -6,6 +6,12 @@ APP = dist/Sadaa.app
 # grant on each reinstall; the stable identity keeps the hotkey working.
 SIGN_IDENTITY = $(shell security find-identity -p codesigning 2>/dev/null | grep -q "Sadaa Local Signing" && echo "Sadaa Local Signing" || echo "-")
 
+# Warn loudly when signing ad-hoc, which silently drops the Accessibility grant
+# on every reinstall. Run scripts/setup-signing.sh once to fix it.
+ifeq ($(SIGN_IDENTITY),-)
+$(warning Signing ad-hoc: run ./scripts/setup-signing.sh once so the Accessibility grant survives reinstalls.)
+endif
+
 # Command Line Tools (no Xcode.app) don't put Testing.framework on the dyld
 # search path. We compile against it with -F and copy it next to the test
 # bundle (@loader_path/../../../ rpath) so the runner can load it. Installing
@@ -15,7 +21,7 @@ CLT_INTEROP = /Library/Developer/CommandLineTools/Library/Developer/usr/lib/lib_
 DEBUG_DIR = $(shell swift build --show-bin-path --build-tests 2>/dev/null)
 SWIFT_TEST_FLAGS = -Xswiftc -F -Xswiftc $(CLT_FRAMEWORKS)
 
-.PHONY: build test bundle run clean
+.PHONY: build test bundle run install clean
 
 build:
 	swift build -c release

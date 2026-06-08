@@ -32,6 +32,7 @@ struct SettingsPage: View {
     @State private var micGranted = false
     @State private var axTrusted = false
     @State private var saved = false
+    @State private var rateError = ""
 
     private let permissionTimer = Timer.publish(every: 1.5, on: .main, in: .common)
         .autoconnect()
@@ -185,6 +186,9 @@ struct SettingsPage: View {
             }
             field("Transcription rate ($/min)", "0.006", $transcriptionRate)
             field("Formatter rate ($/1k chars)", "0.002", $formatterRate)
+            if !rateError.isEmpty {
+                Text(rateError).font(.caption).foregroundStyle(.red)
+            }
             hint("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
         }
     }
@@ -314,32 +318,36 @@ struct SettingsPage: View {
         settings.azureEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.azureDeployment = deployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.azureAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !apiKey.isEmpty {
-            try? Keychain.set(apiKey, account: "azure-openai-key")
-        }
+        saveKey(apiKey, account: "azure-openai-key")
         settings.formattingEnabled = formattingEnabled
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
 
         settings.openaiEnabled = openaiEnabled
         settings.openaiModel = openaiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !openaiKey.isEmpty {
-            try? Keychain.set(openaiKey, account: "openai-key")
-        }
+        saveKey(openaiKey, account: "openai-key")
         settings.maiEnabled = maiEnabled
         settings.maiEndpoint = maiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !maiKey.isEmpty {
-            try? Keychain.set(maiKey, account: "azure-speech-key")
-        }
+        saveKey(maiKey, account: "azure-speech-key")
         let trimmedMaiModel = maiModel.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedMaiModel.isEmpty { settings.maiModel = trimmedMaiModel }
         let trimmedMaiVersion = maiApiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedMaiVersion.isEmpty { settings.maiApiVersion = trimmedMaiVersion }
-        if let rate = Double(transcriptionRate.trimmingCharacters(in: .whitespaces)) {
+
+        // Validate rates instead of silently keeping the old value. Accept a
+        // comma decimal too, so "0,006" works.
+        rateError = ""
+        if let rate = parseRate(transcriptionRate) {
             settings.transcriptionRatePerMinute = rate
+        } else if !transcriptionRate.trimmingCharacters(in: .whitespaces).isEmpty {
+            rateError = "Rates must be numbers, like 0.006."
+            transcriptionRate = String(settings.transcriptionRatePerMinute)
         }
-        if let rate = Double(formatterRate.trimmingCharacters(in: .whitespaces)) {
+        if let rate = parseRate(formatterRate) {
             settings.formatterRatePer1kChars = rate
+        } else if !formatterRate.trimmingCharacters(in: .whitespaces).isEmpty {
+            rateError = "Rates must be numbers, like 0.006."
+            formatterRate = String(settings.formatterRatePer1kChars)
         }
 
         do {
@@ -352,6 +360,26 @@ struct SettingsPage: View {
 
         viewModel.refreshConfig()
         viewModel.refreshCost()
-        saved = true
+        saved = rateError.isEmpty
+        if saved {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
+        }
+    }
+
+    /// Writes a key, or removes it from the Keychain when the field is cleared,
+    /// so blanking a key actually revokes it.
+    private func saveKey(_ value: String, account: String) {
+        if value.isEmpty {
+            Keychain.delete(account: account)
+        } else {
+            try? Keychain.set(value, account: account)
+        }
+    }
+
+    /// Parses a rate, tolerating a comma decimal separator.
+    private func parseRate(_ text: String) -> Double? {
+        let normalized = text.trimmingCharacters(in: .whitespaces)
+            .replacingOccurrences(of: ",", with: ".")
+        return normalized.isEmpty ? nil : Double(normalized)
     }
 }
