@@ -23,6 +23,19 @@ import Foundation
         #expect(!body.contains("name=\"language\""))
     }
 
+    @Test func testGPT4oTranscribeModelUsesPlainJSON() throws {
+        // The gpt-4o-transcribe family rejects verbose_json. whisper-1 keeps it
+        // (and its accurate duration); the gpt-4o models must get plain json.
+        let provider = OpenAIProvider(
+            config: .init(apiKey: "test-key", model: "gpt-4o-transcribe"))
+        let request = try provider.makeRequest(
+            audio: Data([0x01]), filename: "a.wav",
+            hint: TranscriptionHint(languagePin: .auto, dictionaryWords: []))
+        let body = String(decoding: request.httpBody!, as: UTF8.self)
+        #expect(body.contains("name=\"response_format\"\r\n\r\njson\r\n"))
+        #expect(!body.contains("verbose_json"))
+    }
+
     @Test func testRequestWithPinAndDictionary() throws {
         let provider = makeProvider()
         let request = try provider.makeRequest(

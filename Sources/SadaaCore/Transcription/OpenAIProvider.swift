@@ -28,7 +28,11 @@ public final class OpenAIProvider: TranscriptionProvider, @unchecked Sendable {
                             hint: TranscriptionHint) throws -> URLRequest {
         var body = MultipartBody()
         body.addField(name: "model", value: config.model)
-        body.addField(name: "response_format", value: "verbose_json")
+        // whisper-1 supports verbose_json (and returns duration); the
+        // gpt-4o-transcribe family rejects it and needs plain json.
+        let responseFormat = config.model.lowercased().contains("transcribe")
+            ? "json" : "verbose_json"
+        body.addField(name: "response_format", value: responseFormat)
         body.addField(name: "temperature", value: "0")
         if hint.languagePin != .auto {
             body.addField(name: "language", value: hint.languagePin.rawValue)
