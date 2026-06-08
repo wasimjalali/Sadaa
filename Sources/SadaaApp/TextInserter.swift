@@ -8,37 +8,66 @@ enum DeliveryOutcome {
     case clipboardOnly   // both failed; user pastes manually
 }
 
-/// Delivers final text: clipboard first (backup), then AX insert,
-/// then Cmd-V fallback. Spec sections 4 and 5.
+/// Delivers final text: paste at the cursor, AX insert as a fallback, and the
+/// clipboard as the last-resort backup. The user's own clipboard is preserved
+/// across delivery (snapshot + restore). Spec sections 4 and 5.
 struct TextInserter {
+    /// How long to wait before putting the user's clipboard back, so the target
+    /// app has consumed the synthetic paste first. A synthetic Cmd-V is usually
+    /// consumed within tens of ms; this is a comfortable margin.
+    private let restoreDelay: TimeInterval = 0.25
+
     @discardableResult
     func deliver(_ text: String) -> DeliveryOutcome {
+        let pasteboard = NSPasteboard.general
+
         // A secure field became active between record and delivery: never type or
         // paste into a password box. Leave the text on the clipboard so the user
         // can paste it somewhere safe themselves. Spec section 5.
         if IsSecureEventInputEnabled() {
-            let pasteboard = NSPasteboard.general
             pasteboard.clearContents()
             pasteboard.setString(text, forType: .string)
             return .clipboardOnly
         }
 
-        // 1. Clipboard, always (also the backup the user can re-paste).
-        let pasteboard = NSPasteboard.general
+        // Snapshot so the user's clipboard can be restored after delivery.
+        let saved = Clipboard.snapshot(pasteboard)
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // 2. Synthetic Cmd-V FIRST. Paste routes through each app's normal paste
+        // 1. Synthetic Cmd-V FIRST. Paste routes through each app's normal paste
         // handling, so it lands in terminals, Electron and web fields. Writing
         // kAXSelectedText is unreliable there: Terminal, for one, reports
         // success but inserts nothing, which previously swallowed the text.
-        if synthesizePaste() { return .pasted }
+        if synthesizePaste() {
+            restore(saved, after: restoreDelay)
+            return .pasted
+        }
 
-        // 3. Fall back to direct AX insertion at the caret (e.g. when synthetic
-        // events can't be posted).
-        if axInsert(text) { return .insertedViaAX }
+        // 2. Fall back to direct AX insertion at the caret (e.g. when synthetic
+        // events can't be posted). AX writes the element directly, not via the
+        // clipboard, so the user's clipboard can go back right away.
+        if axInsert(text) {
+            restore(saved, after: 0)
+            return .insertedViaAX
+        }
 
+        // 3. Both failed: keep the dictation on the clipboard as the backup and
+        // let the HUD tell the user to paste it. Do NOT restore here.
         return .clipboardOnly
+    }
+
+    /// Restores the user's clipboard after `delay`. A zero delay still defers to
+    /// the next runloop tick so an in-flight AX read has completed.
+    private func restore(_ items: [NSPasteboardItem], after delay: TimeInterval) {
+        guard !items.isEmpty else { return }
+        if delay == 0 {
+            DispatchQueue.main.async { Clipboard.restore(items) }
+        } else {
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                Clipboard.restore(items)
+            }
+        }
     }
 
     private func axInsert(_ text: String) -> Bool {
