@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var history: DictationHistory?
     private var dictionary: DictionaryStore?
     private var snippets: SnippetStore?
+    private var notes: NotesStore?
     private var controller: DictationController?
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
@@ -66,11 +67,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fileURL: sadaaDir.appendingPathComponent("snippets.json"))
         self.snippets = snippets
 
+        let notes = NotesStore(
+            fileURL: sadaaDir.appendingPathComponent("notes.json"))
+        self.notes = notes
+
         let viewModel = SadaaViewModel(
             settings: settings,
             history: history,
             dictionary: dictionary,
             snippets: snippets,
+            notes: notes,
             onToggle: { [weak self] in self?.controller?.toggle() })
         self.viewModel = viewModel
 

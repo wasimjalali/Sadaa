@@ -12,12 +12,14 @@ final class SadaaViewModel: ObservableObject {
     @Published var dictionaryEntries: [DictionaryEntry] = []
     @Published var dictionarySuggestions: [String] = []
     @Published var snippets: [Snippet] = []
+    @Published var notes: [Note] = []
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
 
     private let settings: AppSettings
     private let history: DictationHistory
     private let dictionary: DictionaryStore
     private let snippetStore: SnippetStore
+    private let notesStore: NotesStore
     private let onToggle: () -> Void
 
     /// History pages read search/all directly off the store.
@@ -25,16 +27,18 @@ final class SadaaViewModel: ObservableObject {
 
     init(settings: AppSettings, history: DictationHistory,
          dictionary: DictionaryStore, snippets: SnippetStore,
-         onToggle: @escaping () -> Void) {
+         notes: NotesStore, onToggle: @escaping () -> Void) {
         self.settings = settings
         self.history = history
         self.dictionary = dictionary
         self.snippetStore = snippets
+        self.notesStore = notes
         self.onToggle = onToggle
         refreshConfig()
         refreshRecent()
         refreshDictionary()
         refreshSnippets()
+        refreshNotes()
         refreshCost()
     }
 
@@ -96,5 +100,19 @@ final class SadaaViewModel: ObservableObject {
     func removeSnippet(_ id: UUID) {
         snippetStore.remove(id: id)
         refreshSnippets()
+    }
+
+    // MARK: - Notes
+
+    func refreshNotes() { notes = notesStore.all() }
+
+    func addNote(_ text: String) {
+        notesStore.add(text: text, createdAt: Date())
+        refreshNotes()
+    }
+
+    func removeNote(_ id: UUID) {
+        notesStore.remove(id: id)
+        refreshNotes()
     }
 }
