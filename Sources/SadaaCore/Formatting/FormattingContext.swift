@@ -6,15 +6,18 @@ public struct FormattingContext: Sendable {
     public let dictionaryWords: [String]
     public let speakerContext: String
     public let language: LanguagePin
+    public let snippets: [Snippet]
 
     public init(appBundleID: String?,
                 dictionaryWords: [String],
                 speakerContext: String,
-                language: LanguagePin) {
+                language: LanguagePin,
+                snippets: [Snippet] = []) {
         self.appBundleID = appBundleID
         self.dictionaryWords = dictionaryWords
         self.speakerContext = speakerContext
         self.language = language
+        self.snippets = snippets
     }
 }
 

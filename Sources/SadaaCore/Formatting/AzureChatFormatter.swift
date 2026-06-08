@@ -33,7 +33,8 @@ public final class AzureChatFormatter: @unchecked Sendable {
         let system = FormattingPromptBuilder.systemPrompt(
             profile: profile,
             dictionaryWords: context.dictionaryWords,
-            speakerContext: context.speakerContext)
+            speakerContext: context.speakerContext,
+            snippets: context.snippets)
 
         var components = URLComponents(
             url: config.endpoint.appendingPathComponent(

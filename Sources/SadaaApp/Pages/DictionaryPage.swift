@@ -8,6 +8,8 @@ struct DictionaryPage: View {
 
     @State private var newWord = ""
     @State private var newSoundsLike = ""
+    @State private var newTrigger = ""
+    @State private var newExpansion = ""
 
     var body: some View {
         ScrollView {
@@ -22,6 +24,7 @@ struct DictionaryPage: View {
 
                 addSection
                 entriesSection
+                snippetsSection
             }
             .padding(32)
             .frame(maxWidth: 620, alignment: .topLeading)
@@ -88,6 +91,64 @@ struct DictionaryPage: View {
             .trimmingCharacters(in: .whitespacesAndNewlines))
         newWord = ""
         newSoundsLike = ""
+    }
+
+    // MARK: - Snippets
+
+    private var snippetsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Snippets")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.charcoal)
+            Text("Say the trigger phrase and Sadaa expands it for you.")
+                .font(.caption)
+                .foregroundStyle(Theme.charcoal.opacity(0.6))
+
+            HStack(spacing: 8) {
+                TextField("Trigger (e.g. my sig)", text: $newTrigger)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Expands to", text: $newExpansion)
+                    .textFieldStyle(.roundedBorder)
+                Button("Add") { addSnippet() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.navy)
+                    .disabled(newTrigger.trimmingCharacters(in: .whitespaces).isEmpty
+                              || newExpansion.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+
+            ForEach(viewModel.snippets) { snippet in
+                HStack {
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(snippet.trigger)
+                            .font(.system(size: 13, weight: .medium))
+                            .foregroundStyle(Theme.charcoal)
+                        Text(snippet.expansion)
+                            .font(.caption)
+                            .foregroundStyle(Theme.charcoal.opacity(0.6))
+                            .lineLimit(2)
+                    }
+                    Spacer()
+                    Button {
+                        viewModel.removeSnippet(snippet.id)
+                    } label: {
+                        Image(systemName: "trash")
+                            .foregroundStyle(Theme.charcoal.opacity(0.6))
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(12)
+                .background(Theme.creamSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    private func addSnippet() {
+        viewModel.addSnippet(
+            trigger: newTrigger.trimmingCharacters(in: .whitespacesAndNewlines),
+            expansion: newExpansion.trimmingCharacters(in: .whitespacesAndNewlines))
+        newTrigger = ""
+        newExpansion = ""
     }
 
     // MARK: - Entries

@@ -11,25 +11,30 @@ final class SadaaViewModel: ObservableObject {
     @Published var languagePin: LanguagePin = .auto
     @Published var dictionaryEntries: [DictionaryEntry] = []
     @Published var dictionarySuggestions: [String] = []
+    @Published var snippets: [Snippet] = []
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
 
     private let settings: AppSettings
     private let history: DictationHistory
     private let dictionary: DictionaryStore
+    private let snippetStore: SnippetStore
     private let onToggle: () -> Void
 
     /// History pages read search/all directly off the store.
     var historyStore: DictationHistory { history }
 
     init(settings: AppSettings, history: DictationHistory,
-         dictionary: DictionaryStore, onToggle: @escaping () -> Void) {
+         dictionary: DictionaryStore, snippets: SnippetStore,
+         onToggle: @escaping () -> Void) {
         self.settings = settings
         self.history = history
         self.dictionary = dictionary
+        self.snippetStore = snippets
         self.onToggle = onToggle
         refreshConfig()
         refreshRecent()
         refreshDictionary()
+        refreshSnippets()
         refreshCost()
     }
 
@@ -77,5 +82,19 @@ final class SadaaViewModel: ObservableObject {
     func dismissSuggestion(_ term: String) {
         dictionary.dismiss(term)
         refreshDictionary()
+    }
+
+    // MARK: - Snippets
+
+    func refreshSnippets() { snippets = snippetStore.all() }
+
+    func addSnippet(trigger: String, expansion: String) {
+        snippetStore.add(trigger: trigger, expansion: expansion)
+        refreshSnippets()
+    }
+
+    func removeSnippet(_ id: UUID) {
+        snippetStore.remove(id: id)
+        refreshSnippets()
     }
 }

@@ -13,6 +13,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var viewModel: SadaaViewModel?
     private var history: DictationHistory?
     private var dictionary: DictionaryStore?
+    private var snippets: SnippetStore?
     private var controller: DictationController?
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
@@ -61,10 +62,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fileURL: sadaaDir.appendingPathComponent("dictionary.json"))
         self.dictionary = dictionary
 
+        let snippets = SnippetStore(
+            fileURL: sadaaDir.appendingPathComponent("snippets.json"))
+        self.snippets = snippets
+
         let viewModel = SadaaViewModel(
             settings: settings,
             history: history,
             dictionary: dictionary,
+            snippets: snippets,
             onToggle: { [weak self] in self?.controller?.toggle() })
         self.viewModel = viewModel
 
@@ -98,12 +104,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             format: Self.buildFormatter(settings: settings).map { formatter in
                 { raw, ctx in try await formatter.format(rawTranscript: raw, context: ctx) }
             },
-            context: { [settings, dictionary] in
+            context: { [settings, dictionary, snippets] in
                 FormattingContext(
                     appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
                     dictionaryWords: dictionary.biasList(budget: 50),
                     speakerContext: settings.speakerContext,
-                    language: settings.languagePin)
+                    language: settings.languagePin,
+                    snippets: snippets.all())
             },
             suggestTerms: { [weak self] terms in
                 self?.dictionary?.suggest(terms)
