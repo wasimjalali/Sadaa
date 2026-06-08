@@ -53,7 +53,8 @@ struct FakeProvider: TranscriptionProvider {
         try? FileManager.default.removeItem(at: dir)
     }
 
-    private func makeController(providers: [TranscriptionProvider])
+    private func makeController(providers: [TranscriptionProvider],
+                                now: @escaping () -> Date = { Date() })
         -> DictationController {
         let controller = DictationController(
             recorder: recorder,
@@ -62,7 +63,8 @@ struct FakeProvider: TranscriptionProvider {
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
             deliver: { [weak self] text in self?.delivered.append(text) },
-            record: { [weak self] record in self?.records.append(record) }
+            record: { [weak self] record in self?.records.append(record) },
+            now: now
         )
         controller.onStateChange = { [weak self] state in
             self?.states.append(state)
@@ -159,6 +161,37 @@ struct FakeProvider: TranscriptionProvider {
         #expect(records.count == 1)
         #expect(records.first?.text == "hello world")
         #expect(records.first?.provider == "fake")
+    }
+
+    @Test func testDurationFallsBackToMeasuredWhenProviderOmitsIt() async throws {
+        // The Azure json path returns no duration; the cost meter must not read 0.
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "hello", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        var ticks = [Date(timeIntervalSince1970: 100),
+                     Date(timeIntervalSince1970: 107)]
+        let controller = makeController(providers: [provider]) {
+            ticks.isEmpty ? Date(timeIntervalSince1970: 107) : ticks.removeFirst()
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(records.first?.durationSeconds == 7)
+    }
+
+    @Test func testProviderDurationIsPreferredOverMeasured() async throws {
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "hello", detectedLanguage: nil,
+                                        durationSeconds: 3)))
+        var ticks = [Date(timeIntervalSince1970: 100),
+                     Date(timeIntervalSince1970: 999)]
+        let controller = makeController(providers: [provider]) {
+            ticks.isEmpty ? Date(timeIntervalSince1970: 999) : ticks.removeFirst()
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(records.first?.durationSeconds == 3)
     }
 
     @Test func testFallbackChain() async throws {

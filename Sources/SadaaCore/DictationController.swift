@@ -28,8 +28,10 @@ public final class DictationController {
     private let context: () -> FormattingContext
     private let suggestTerms: ([String]) -> Void
     private let formatterFellBack: () -> Void
+    private let now: () -> Date
     private var pendingRawMode = false
     private var processingTask: Task<Void, Never>?
+    private var recordingStartedAt: Date?
 
     public init(recorder: AudioRecording,
                 providers: @escaping () -> [TranscriptionProvider],
@@ -44,7 +46,8 @@ public final class DictationController {
                                       speakerContext: "", language: .auto)
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
-                formatterFellBack: @escaping () -> Void = {}) {
+                formatterFellBack: @escaping () -> Void = {},
+                now: @escaping () -> Date = { Date() }) {
         self.recorder = recorder
         self.providers = providers
         self.store = store
@@ -56,6 +59,7 @@ public final class DictationController {
         self.context = context
         self.suggestTerms = suggestTerms
         self.formatterFellBack = formatterFellBack
+        self.now = now
         self.recorder.onAutoStop = { [weak self] in
             DispatchQueue.main.async { self?.toggle() }
         }
@@ -92,6 +96,7 @@ public final class DictationController {
         let url = store.newRecordingURL()
         do {
             try recorder.start(to: url)
+            recordingStartedAt = now()
             state = .recording
         } catch {
             state = .error("Couldn't start recording: \(error.localizedDescription)")
@@ -106,6 +111,9 @@ public final class DictationController {
             state = .error("Couldn't stop recording: \(error.localizedDescription)")
             return
         }
+        // Wall-clock recording length. The Azure json response carries no
+        // duration, so this is the cost meter's only signal on the default path.
+        let measuredDuration = recordingStartedAt.map { max(0, now().timeIntervalSince($0)) }
 
         // state is already .transcribing (set synchronously in toggle())
         let chain = providers()
@@ -155,7 +163,7 @@ public final class DictationController {
             createdAt: Date(),
             language: transcript.detectedLanguage,
             provider: usedProvider ?? "unknown",
-            durationSeconds: transcript.durationSeconds))
+            durationSeconds: transcript.durationSeconds ?? measuredDuration))
 
         state = .delivering
         deliver(finalText)
