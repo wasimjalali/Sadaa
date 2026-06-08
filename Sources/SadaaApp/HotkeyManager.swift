@@ -23,21 +23,24 @@ struct HotkeyOption: Identifiable, Hashable {
 }
 
 /// System-wide key listener via CGEventTap.
-/// - Right Option tap -> onToggle
+/// - Right Option tap -> onToggle (dictation)
+/// - Right Command tap -> onVoiceEdit (edit the selection)
 /// - Esc while recording -> onCancel (the Esc event is consumed)
 /// Requires Accessibility trust. Spec sections 4 and 8.
 final class HotkeyManager {
     private static let escapeKeycode: Int64 = 53
-    private static let eKeycode: Int64 = 14
 
     /// The modifier key whose tap toggles dictation. Default Right Option (61).
     /// Updatable live: the tap listens to all flagsChanged and filters here, so
     /// changing this takes effect without restarting the tap.
     var activationKeycode: Int64 = 61
+    /// The modifier key whose tap starts a voice edit. Default Right Command (54),
+    /// symmetric with the dictation tap. A lone Command tap types nothing.
+    var voiceEditKeycode: Int64 = 54
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
-    /// Ctrl+Option+E: voice-edit the current selection. Spec section 8.
+    /// Right Command tap: voice-edit the current selection. Spec section 8.
     var onVoiceEdit: (() -> Void)?
 
     /// The flag a given modifier keycode sets while held, used to read down/up.
@@ -55,7 +58,10 @@ final class HotkeyManager {
     /// when Esc belongs to us.
     var isRecordingActive: (() -> Bool) = { false }
 
-    private var recognizer = RightOptionTapRecognizer()
+    // One tap recognizer per tap-key. The type is a generic modifier-tap
+    // detector (its event names are historical, from the original Right Option).
+    private var activationRecognizer = RightOptionTapRecognizer()
+    private var voiceEditRecognizer = RightOptionTapRecognizer()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -117,23 +123,25 @@ final class HotkeyManager {
             // Edge case (unchanged): holding the other side of the same modifier
             // keeps the mask set, so the up event won't register. Acceptable.
             let isDown = event.flags.contains(Self.flagMask(for: keycode))
-            let fired = recognizer.handle(isDown ? .rightOptionDown(at: now)
-                                                 : .rightOptionUp(at: now))
-            if fired {
+            if activationRecognizer.handle(isDown ? .rightOptionDown(at: now)
+                                                  : .rightOptionUp(at: now)) {
                 DispatchQueue.main.async { [weak self] in self?.onToggle?() }
+            }
+        case .flagsChanged where keycode == voiceEditKeycode:
+            let isDown = event.flags.contains(Self.flagMask(for: keycode))
+            if voiceEditRecognizer.handle(isDown ? .rightOptionDown(at: now)
+                                                 : .rightOptionUp(at: now)) {
+                DispatchQueue.main.async { [weak self] in self?.onVoiceEdit?() }
             }
         case .keyDown where keycode == Self.escapeKeycode:
             if isRecordingActive() {
                 DispatchQueue.main.async { [weak self] in self?.onCancel?() }
                 return nil // consume Esc so the frontmost app never sees it
             }
-        case .keyDown where keycode == Self.eKeycode
-            && event.flags.contains(.maskControl)
-            && event.flags.contains(.maskAlternate):
-            DispatchQueue.main.async { [weak self] in self?.onVoiceEdit?() }
-            return nil // consume Ctrl+Option+E so the target app never sees it
         case .keyDown:
-            _ = recognizer.handle(.otherKeyDown)
+            // Any other key invalidates a pending tap on either tap-key.
+            _ = activationRecognizer.handle(.otherKeyDown)
+            _ = voiceEditRecognizer.handle(.otherKeyDown)
         default:
             break
         }
