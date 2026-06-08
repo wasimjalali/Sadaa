@@ -1,5 +1,11 @@
 APP = dist/Sadaa.app
 
+# Sign with the stable self-signed identity if it exists (set up once via
+# scripts/setup-signing.sh), otherwise fall back to ad-hoc. Ad-hoc signing
+# changes the code hash every build, which makes macOS drop the Accessibility
+# grant on each reinstall; the stable identity keeps the hotkey working.
+SIGN_IDENTITY = $(shell security find-identity -p codesigning 2>/dev/null | grep -q "Sadaa Local Signing" && echo "Sadaa Local Signing" || echo "-")
+
 # Command Line Tools (no Xcode.app) don't put Testing.framework on the dyld
 # search path. We compile against it with -F and copy it next to the test
 # bundle (@loader_path/../../../ rpath) so the runner can load it. Installing
@@ -26,7 +32,7 @@ bundle: build
 	cp bundle/Info.plist $(APP)/Contents/Info.plist
 	cp .build/release/SadaaApp $(APP)/Contents/MacOS/Sadaa
 	cp assets/branding/Sadaa.icns $(APP)/Contents/Resources/Sadaa.icns
-	codesign --force --deep --sign - $(APP)
+	codesign --force --deep --sign "$(SIGN_IDENTITY)" $(APP)
 
 run: bundle
 	open $(APP)
