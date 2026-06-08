@@ -14,6 +14,14 @@ struct SettingsPage: View {
     @State private var formattingEnabled = true
     @State private var gptDeployment = ""
     @State private var speakerContext = ""
+    @State private var openaiEnabled = false
+    @State private var openaiModel = ""
+    @State private var openaiKey = ""
+    @State private var maiEnabled = false
+    @State private var maiEndpoint = ""
+    @State private var maiKey = ""
+    @State private var transcriptionRate = ""
+    @State private var formatterRate = ""
     @State private var saved = false
 
     var body: some View {
@@ -57,6 +65,19 @@ struct SettingsPage: View {
                             .foregroundStyle(.secondary)
                     }
 
+                    Section("Fallback providers") {
+                        Toggle("OpenAI API fallback", isOn: $openaiEnabled)
+                        TextField("OpenAI model (e.g. whisper-1)", text: $openaiModel)
+                        SecureField("OpenAI API key (Keychain)", text: $openaiKey)
+                        Toggle("Azure Speech / MAI", isOn: $maiEnabled)
+                        TextField("MAI endpoint (https://res.cognitiveservices.azure.com)",
+                                  text: $maiEndpoint)
+                        SecureField("MAI subscription key (Keychain)", text: $maiKey)
+                        Text("Providers are tried in order: Azure OpenAI, then OpenAI, then MAI.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+
                     Section("Language") {
                         Picker("Dictation language", selection: languageBinding) {
                             ForEach(LanguagePin.allCases, id: \.self) { pin in
@@ -64,6 +85,14 @@ struct SettingsPage: View {
                             }
                         }
                         .pickerStyle(.segmented)
+                    }
+
+                    Section("Cost") {
+                        TextField("Transcription rate ($/min)", text: $transcriptionRate)
+                        TextField("Formatter rate ($/1k chars)", text: $formatterRate)
+                        Text("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Section("Hotkey") {
@@ -106,6 +135,14 @@ struct SettingsPage: View {
         formattingEnabled = settings.formattingEnabled
         gptDeployment = settings.gptDeployment
         speakerContext = settings.speakerContext
+        openaiEnabled = settings.openaiEnabled
+        openaiModel = settings.openaiModel
+        openaiKey = Keychain.get(account: "openai-key") ?? ""
+        maiEnabled = settings.maiEnabled
+        maiEndpoint = settings.maiEndpoint
+        maiKey = Keychain.get(account: "azure-speech-key") ?? ""
+        transcriptionRate = String(settings.transcriptionRatePerMinute)
+        formatterRate = String(settings.formatterRatePer1kChars)
     }
 
     private func save() {
@@ -122,7 +159,28 @@ struct SettingsPage: View {
         settings.gptDeployment = gptDeployment
             .trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
+
+        settings.openaiEnabled = openaiEnabled
+        settings.openaiModel = openaiModel
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !openaiKey.isEmpty {
+            try? Keychain.set(openaiKey, account: "openai-key")
+        }
+        settings.maiEnabled = maiEnabled
+        settings.maiEndpoint = maiEndpoint
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if !maiKey.isEmpty {
+            try? Keychain.set(maiKey, account: "azure-speech-key")
+        }
+        if let rate = Double(transcriptionRate.trimmingCharacters(in: .whitespaces)) {
+            settings.transcriptionRatePerMinute = rate
+        }
+        if let rate = Double(formatterRate.trimmingCharacters(in: .whitespaces)) {
+            settings.formatterRatePer1kChars = rate
+        }
+
         viewModel.refreshConfig()
+        viewModel.refreshCost()
         saved = true
     }
 }

@@ -16,6 +16,14 @@ public final class AppSettings {
         static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
         static let speakerContext = "speakerContext"
+        static let openaiEnabled = "openaiEnabled"
+        static let openaiModel = "openaiModel"
+        static let maiEnabled = "maiEnabled"
+        static let maiEndpoint = "maiEndpoint"
+        static let maiApiVersion = "maiApiVersion"
+        static let maiModel = "maiModel"
+        static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
+        static let formatterRatePer1kChars = "formatterRatePer1kChars"
     }
 
     private let defaults: UserDefaults
@@ -75,5 +83,51 @@ public final class AppSettings {
             "The speaker is an AI specialist and founder; dictations are usually about AI engineering and dev tooling. Resolve ambiguous words toward that domain (\"cloud code\" means \"Claude Code\", \"codecs\" means \"Codex\")."
         }
         set { defaults.set(newValue, forKey: Keys.speakerContext) }
+    }
+
+    // MARK: - Fallback providers (spec sections 3.4, 3.5)
+
+    /// OpenAI API fallback. Off until a key is saved. Spec section 3.4.
+    public var openaiEnabled: Bool {
+        get { defaults.bool(forKey: Keys.openaiEnabled) }
+        set { defaults.set(newValue, forKey: Keys.openaiEnabled) }
+    }
+
+    public var openaiModel: String {
+        get { defaults.string(forKey: Keys.openaiModel) ?? "whisper-1" }
+        set { defaults.set(newValue, forKey: Keys.openaiModel) }
+    }
+
+    /// MAI / Azure Speech provider. Ships disabled. Spec section 3.3.
+    public var maiEnabled: Bool {
+        get { defaults.bool(forKey: Keys.maiEnabled) }
+        set { defaults.set(newValue, forKey: Keys.maiEnabled) }
+    }
+
+    public var maiEndpoint: String {
+        get { defaults.string(forKey: Keys.maiEndpoint) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.maiEndpoint) }
+    }
+
+    public var maiApiVersion: String {
+        get { defaults.string(forKey: Keys.maiApiVersion) ?? "2025-10-15" }
+        set { defaults.set(newValue, forKey: Keys.maiApiVersion) }
+    }
+
+    public var maiModel: String {
+        get { defaults.string(forKey: Keys.maiModel) ?? "mai-transcribe-1.5" }
+        set { defaults.set(newValue, forKey: Keys.maiModel) }
+    }
+
+    // MARK: - Cost meter rates (spec section 7)
+
+    public var transcriptionRatePerMinute: Double {
+        get { defaults.object(forKey: Keys.transcriptionRatePerMinute) as? Double ?? 0.006 }
+        set { defaults.set(newValue, forKey: Keys.transcriptionRatePerMinute) }
+    }
+
+    public var formatterRatePer1kChars: Double {
+        get { defaults.object(forKey: Keys.formatterRatePer1kChars) as? Double ?? 0.002 }
+        set { defaults.set(newValue, forKey: Keys.formatterRatePer1kChars) }
     }
 }

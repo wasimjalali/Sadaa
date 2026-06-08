@@ -20,6 +20,14 @@ enum PageFormat {
         case .de: return "German"
         }
     }
+
+    static func minutes(_ value: Double) -> String {
+        String(format: "%.1f min", value)
+    }
+
+    static func dollars(_ value: Double) -> String {
+        String(format: "$%.2f", value)
+    }
 }
 
 /// The landing page: the mic control, connection and language status, and a

@@ -21,6 +21,10 @@ struct HistoryPage: View {
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.charcoal)
 
+            Text("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost))")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.charcoal.opacity(0.55))
+
             searchField
 
             content
@@ -99,6 +103,9 @@ struct HistoryPage: View {
                     tag(language)
                 }
                 tag(record.provider)
+                if let cost = record.estimatedCost {
+                    tag(PageFormat.dollars(cost))
+                }
             }
         }
         .padding(12)

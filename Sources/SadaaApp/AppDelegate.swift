@@ -85,8 +85,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 }
             },
             record: { [weak self] record in
-                self?.history?.append(record)
-                self?.viewModel?.refreshRecent()
+                guard let self else { return }
+                let cost = CostEstimator.estimate(
+                    durationSeconds: record.durationSeconds,
+                    transcriptionRatePerMinute: self.settings.transcriptionRatePerMinute,
+                    characters: record.text.count,
+                    formatterRatePer1kChars: self.settings.formatterRatePer1kChars)
+                self.history?.append(record.withEstimatedCost(cost))
+                self.viewModel?.refreshRecent()
+                self.viewModel?.refreshCost()
             },
             format: Self.buildFormatter(settings: settings).map { formatter in
                 { raw, ctx in try await formatter.format(rawTranscript: raw, context: ctx) }
@@ -114,19 +121,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.controller = controller
     }
 
+    /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
+    /// link is included only when configured. Spec section 3.5.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        guard let endpoint = URL(string: settings.azureEndpoint),
-              !settings.azureEndpoint.isEmpty,
-              !settings.azureDeployment.isEmpty,
-              let key = Keychain.get(account: "azure-openai-key")
-        else { return [] }
-        let config = AzureOpenAIProvider.Config(
-            endpoint: endpoint,
-            apiKey: key,
-            deployment: settings.azureDeployment,
-            apiVersion: settings.azureAPIVersion)
-        return [AzureOpenAIProvider(config: config)]
+        var chain: [TranscriptionProvider] = []
+
+        if let endpoint = URL(string: settings.azureEndpoint),
+           !settings.azureEndpoint.isEmpty,
+           !settings.azureDeployment.isEmpty,
+           let key = Keychain.get(account: "azure-openai-key") {
+            chain.append(AzureOpenAIProvider(config: .init(
+                endpoint: endpoint, apiKey: key,
+                deployment: settings.azureDeployment,
+                apiVersion: settings.azureAPIVersion)))
+        }
+
+        if settings.openaiEnabled,
+           let key = Keychain.get(account: "openai-key"), !key.isEmpty {
+            chain.append(OpenAIProvider(config: .init(
+                apiKey: key, model: settings.openaiModel)))
+        }
+
+        if settings.maiEnabled,
+           let endpoint = URL(string: settings.maiEndpoint),
+           !settings.maiEndpoint.isEmpty,
+           let key = Keychain.get(account: "azure-speech-key"), !key.isEmpty {
+            chain.append(AzureSpeechProvider(config: .init(
+                endpoint: endpoint, apiKey: key,
+                apiVersion: settings.maiApiVersion,
+                model: settings.maiModel)))
+        }
+
+        return chain
     }
 
     /// Builds the smart formatter from settings, or nil when formatting is off

@@ -11,6 +11,7 @@ final class SadaaViewModel: ObservableObject {
     @Published var languagePin: LanguagePin = .auto
     @Published var dictionaryEntries: [DictionaryEntry] = []
     @Published var dictionarySuggestions: [String] = []
+    @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
 
     private let settings: AppSettings
     private let history: DictationHistory
@@ -29,6 +30,7 @@ final class SadaaViewModel: ObservableObject {
         refreshConfig()
         refreshRecent()
         refreshDictionary()
+        refreshCost()
     }
 
     func toggle() { onToggle() }
@@ -36,6 +38,10 @@ final class SadaaViewModel: ObservableObject {
     func refreshState(_ state: DictationState) { dictationState = state }
 
     func refreshRecent() { recent = history.recent(5) }
+
+    func refreshCost() {
+        monthlyCost = CostMeter.monthlyTotals(records: history.all(), now: Date())
+    }
 
     func refreshConfig() {
         azureConfigured =
