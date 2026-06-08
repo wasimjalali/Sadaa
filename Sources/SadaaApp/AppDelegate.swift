@@ -178,6 +178,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                 dictionary: DictionaryStore,
                                 snippets: SnippetStore) {
         let recorder = AudioRecorder(silenceTimeout: settings.silenceTimeout)
+        // Feed the HUD's live level meter, same as dictation, so the pill
+        // animates while a voice edit is recording.
+        recorder.onLevel = { [weak self] level in
+            DispatchQueue.main.async { self?.currentLevel = level }
+        }
         let controller = VoiceEditController(
             recorder: recorder,
             providers: { [settings] in Self.buildProviders(settings: settings) },
@@ -240,10 +245,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let pasteboard = NSPasteboard.general
         let saved = Clipboard.snapshot(pasteboard)
 
-        // Let the trigger key (Right Option) fully release first, otherwise the
-        // combined session state merges it and the synthetic Cmd-C becomes
-        // Cmd-Option-C, which copies nothing.
-        usleep(60_000)   // 60ms
+        // Wait for the trigger key to fully release before synthesizing Cmd-C.
+        // While Right Option (or any non-command modifier) is still down, the
+        // combined session state merges it and Cmd-C becomes Cmd-Option-C,
+        // which copies nothing. This is what broke voice-edit in Slack and
+        // other Electron/browser apps, where AX gives no selection so the copy
+        // fallback is the only path. A fixed delay was a guess; poll the live
+        // modifier flags instead so it works no matter how long the key is held.
+        waitForTriggerModifiersToClear(timeout: 0.5)
 
         let before = pasteboard.changeCount
         guard let source = CGEventSource(stateID: .combinedSessionState),
@@ -255,10 +264,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
 
-        // Wait up to 600ms for the copy to land; some apps (Electron, browsers)
-        // are slow. 200ms was missing those and reporting "select text first".
+        // Wait up to 800ms for the copy to land; some apps (Slack, other
+        // Electron, browsers) are slow. The loop breaks as soon as the clipboard
+        // changes, so the ceiling only costs time when a copy genuinely fails.
         var copied: String?
-        let deadline = Date().addingTimeInterval(0.6)
+        let deadline = Date().addingTimeInterval(0.8)
         while Date() < deadline {
             if pasteboard.changeCount != before {
                 copied = pasteboard.string(forType: .string)
@@ -269,6 +279,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         Clipboard.restore(saved, to: pasteboard)
         let trimmed = copied?.trimmingCharacters(in: .whitespacesAndNewlines)
         return (trimmed?.isEmpty == false) ? copied : nil
+    }
+
+    /// Blocks until every modifier that could contaminate a synthetic Cmd-C is
+    /// released, or the timeout elapses. We tolerate Command (we set it
+    /// ourselves) but Option, Control, Shift and Fn would each turn Cmd-C into a
+    /// different shortcut that copies nothing. Returns immediately once clear.
+    private static func waitForTriggerModifiersToClear(timeout: TimeInterval) {
+        let contaminating: CGEventFlags =
+            [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
+        let deadline = Date().addingTimeInterval(timeout)
+        while Date() < deadline {
+            let flags = CGEventSource.flagsState(.combinedSessionState)
+            if flags.intersection(contaminating).isEmpty { return }
+            usleep(10_000)   // 10ms
+        }
     }
 
     /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
@@ -436,15 +461,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func renderVoiceEdit(_ state: VoiceEditState) {
         switch state {
         case .idle:
+            stopRecordingTimer()
             setIcon("waveform", tint: nil)
             hud.hide(after: 0.4)
         case .recording:
             setIcon("pencil", tint: .systemRed)
-            hud.show(.recording(seconds: 0, level: 0))
+            // Same ticking timer as dictation: the pill shows the running
+            // seconds and the live audio level so you can see it is recording.
+            startRecordingTimer()
         case .rewriting:
+            stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
         case .error(let message):
+            stopRecordingTimer()
             setIcon("waveform", tint: nil)
             hud.show(.error(message))
             hud.hide(after: 6)

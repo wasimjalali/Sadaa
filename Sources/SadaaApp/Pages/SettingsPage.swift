@@ -44,11 +44,14 @@ struct SettingsPage: View {
                     .font(.system(size: 24, weight: .bold))
                     .foregroundStyle(Theme.charcoal)
 
-                azureCard
-                formattingCard
-                fallbackCard
-                languageCostCard
+                // Ordered by how often you actually touch it: the daily controls
+                // up top, one-time setup and troubleshooting toward the bottom.
                 hotkeyCard
+                languageCard
+                formattingCard
+                azureCard
+                fallbackCard
+                costCard
                 generalCard
                 permissionsCard
             }
@@ -170,8 +173,8 @@ struct SettingsPage: View {
         }
     }
 
-    private var languageCostCard: some View {
-        card("Language and cost") {
+    private var languageCard: some View {
+        card("Language") {
             VStack(alignment: .leading, spacing: 5) {
                 Text("Dictation language")
                     .font(.system(size: 12, weight: .medium))
@@ -184,12 +187,18 @@ struct SettingsPage: View {
                 .pickerStyle(.segmented)
                 .labelsHidden()
             }
+            hint("Also available from the menu-bar icon. Auto-detect handles most cases; pin English or German if you switch a lot.")
+        }
+    }
+
+    private var costCard: some View {
+        card("Usage and cost") {
+            hint("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
             field("Transcription rate ($/min)", "0.006", $transcriptionRate)
             field("Formatter rate ($/1k chars)", "0.002", $formatterRate)
             if !rateError.isEmpty {
                 Text(rateError).font(.caption).foregroundStyle(.red)
             }
-            hint("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
         }
     }
 
