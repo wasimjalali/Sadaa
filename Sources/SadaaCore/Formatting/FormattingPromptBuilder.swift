@@ -6,12 +6,21 @@ public enum FormattingPromptBuilder {
     public static func systemPrompt(profile: FormattingProfile,
                                     dictionaryWords: [String],
                                     speakerContext: String,
-                                    snippets: [Snippet] = []) -> String {
+                                    snippets: [Snippet] = [],
+                                    language: LanguagePin = .auto) -> String {
         var lines: [String] = []
         lines.append("You clean up dictated speech into polished written text.")
         lines.append(speakerContext)
         lines.append(profile.promptFragment)
-        lines.append("Always: remove filler words, fix punctuation and casing, apply mid-sentence self-corrections (\"at 2, actually 3\" becomes \"at 3\"), and reply in the same language as the input (German stays German).")
+        lines.append("Always: remove filler words, fix punctuation and casing, and apply mid-sentence self-corrections (\"at 2, actually 3\" becomes \"at 3\").")
+        switch language {
+        case .auto:
+            lines.append("Output language: write in the SAME language the words were actually spoken in. German speech stays German, English stays English. Judge by the run of words, not by a single borrowed term, and do not translate.")
+        case .en:
+            lines.append("Output language: the user has pinned English. Write the final text in natural English. If any part was spoken in another language, translate it so the entire result is English.")
+        case .de:
+            lines.append("Output language: the user has pinned German. Write the final text in natural German. If any part was spoken in another language, translate it so the entire result is German.")
+        }
         lines.append("Lists: when the speaker enumerates items or asks for a list (cues like \"first / second / third\", \"next point\", \"bullet\", \"number one\", or several parallel items in a row), format them as a clean Markdown list, one item per line, using \"- \" for unordered items or \"1.\", \"2.\" when order matters. Put each item on its own line with a line break between them. Do NOT turn ordinary sentences or prose into a list, and do not invent items the speaker did not say.")
         if !dictionaryWords.isEmpty {
             lines.append("Enforce these exact spellings when they occur: \(dictionaryWords.joined(separator: ", ")).")

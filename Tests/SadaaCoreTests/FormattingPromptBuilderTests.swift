@@ -29,6 +29,30 @@ import Testing
         #expect(!prompt.contains("Enforce these exact spellings"))
     }
 
+    @Test func testAutoLanguageKeepsInputLanguage() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default, dictionaryWords: [],
+            speakerContext: "ctx", language: .auto)
+        #expect(prompt.contains("SAME language"))
+        #expect(prompt.contains("do not translate"))
+    }
+
+    @Test func testPinnedEnglishEnforcesEnglish() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default, dictionaryWords: [],
+            speakerContext: "ctx", language: .en)
+        #expect(prompt.contains("pinned English"))
+        #expect(prompt.contains("translate it so the entire result is English"))
+    }
+
+    @Test func testPinnedGermanEnforcesGerman() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default, dictionaryWords: [],
+            speakerContext: "ctx", language: .de)
+        #expect(prompt.contains("pinned German"))
+        #expect(prompt.contains("result is German"))
+    }
+
     @Test func testInstructsListFormatting() {
         let prompt = FormattingPromptBuilder.systemPrompt(
             profile: FormattingProfiles.default,
