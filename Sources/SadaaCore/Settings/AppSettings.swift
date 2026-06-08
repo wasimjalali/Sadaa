@@ -67,9 +67,10 @@ public final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.recordingsToKeep) }
     }
 
-    /// Virtual keycode of the activation modifier key. Default 61 = Right Option.
+    /// Virtual keycode of the activation modifier key. Default 54 = Right Command
+    /// (voice-edit then takes the other right-side tap key, Right Option).
     public var hotkeyKeycode: Int {
-        get { defaults.object(forKey: Keys.hotkeyKeycode) as? Int ?? 61 }
+        get { defaults.object(forKey: Keys.hotkeyKeycode) as? Int ?? 54 }
         set { defaults.set(newValue, forKey: Keys.hotkeyKeycode) }
     }
 

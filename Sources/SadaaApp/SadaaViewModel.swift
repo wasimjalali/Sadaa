@@ -16,7 +16,7 @@ final class SadaaViewModel: ObservableObject {
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
-    @Published var hotkeyKeycode: Int = 61
+    @Published var hotkeyKeycode: Int = 54
     /// A failed dictation whose audio is retained and can be retried.
     @Published var canRetry: Bool = false
 

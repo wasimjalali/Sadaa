@@ -218,7 +218,7 @@ struct SettingsPage: View {
                     .font(.caption)
                     .foregroundStyle(Theme.charcoal.opacity(0.7))
             }
-            hint("Cancel a recording with Esc. Voice-edit a selection by tapping Right Command.")
+            hint("Cancel a recording with Esc. Voice-edit a selection by tapping \(viewModel.hotkeyKeycode == 61 ? "Right Command" : "Right Option").")
         }
     }
 

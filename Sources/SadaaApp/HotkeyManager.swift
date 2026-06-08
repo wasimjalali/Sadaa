@@ -23,20 +23,20 @@ struct HotkeyOption: Identifiable, Hashable {
 }
 
 /// System-wide key listener via CGEventTap.
-/// - Right Option tap -> onToggle (dictation)
-/// - Right Command tap -> onVoiceEdit (edit the selection)
+/// - Right Command tap -> onToggle (dictation)
+/// - Right Option tap -> onVoiceEdit (edit the selection)
 /// - Esc while recording -> onCancel (the Esc event is consumed)
 /// Requires Accessibility trust. Spec sections 4 and 8.
 final class HotkeyManager {
     private static let escapeKeycode: Int64 = 53
 
-    /// The modifier key whose tap toggles dictation. Default Right Option (61).
+    /// The modifier key whose tap toggles dictation. Default Right Command (54).
     /// Updatable live: the tap listens to all flagsChanged and filters here, so
     /// changing this takes effect without restarting the tap.
-    var activationKeycode: Int64 = 61
-    /// The modifier key whose tap starts a voice edit. Default Right Command (54),
-    /// symmetric with the dictation tap. A lone Command tap types nothing.
-    var voiceEditKeycode: Int64 = 54
+    var activationKeycode: Int64 = 54
+    /// Voice-edit uses the OTHER of the two right-side tap keys, so it never
+    /// collides with the dictation key: Right Command <-> Right Option.
+    var voiceEditKeycode: Int64 { activationKeycode == 61 ? 54 : 61 }
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
