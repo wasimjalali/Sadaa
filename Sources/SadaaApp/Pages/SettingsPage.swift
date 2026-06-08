@@ -11,6 +11,9 @@ struct SettingsPage: View {
     @State private var deployment = ""
     @State private var apiVersion = ""
     @State private var apiKey = ""
+    @State private var formattingEnabled = true
+    @State private var gptDeployment = ""
+    @State private var speakerContext = ""
     @State private var saved = false
 
     var body: some View {
@@ -35,6 +38,23 @@ struct SettingsPage: View {
                                 Text("Saved").foregroundStyle(.secondary)
                             }
                         }
+                    }
+
+                    Section("Smart formatting") {
+                        Toggle("Format dictations with GPT", isOn: $formattingEnabled)
+                        TextField("GPT deployment name (e.g. gpt-4o-mini)",
+                                  text: $gptDeployment)
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Speaker context")
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                            TextEditor(text: $speakerContext)
+                                .frame(minHeight: 64)
+                                .font(.system(size: 12))
+                        }
+                        Text("Hold Shift when you stop to skip formatting for one dictation.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                     }
 
                     Section("Language") {
@@ -83,6 +103,9 @@ struct SettingsPage: View {
         deployment = settings.azureDeployment
         apiVersion = settings.azureAPIVersion
         apiKey = Keychain.get(account: "azure-openai-key") ?? ""
+        formattingEnabled = settings.formattingEnabled
+        gptDeployment = settings.gptDeployment
+        speakerContext = settings.speakerContext
     }
 
     private func save() {
@@ -95,6 +118,10 @@ struct SettingsPage: View {
         if !apiKey.isEmpty {
             try? Keychain.set(apiKey, account: "azure-openai-key")
         }
+        settings.formattingEnabled = formattingEnabled
+        settings.gptDeployment = gptDeployment
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.speakerContext = speakerContext
         viewModel.refreshConfig()
         saved = true
     }
