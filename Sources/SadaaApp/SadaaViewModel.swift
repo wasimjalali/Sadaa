@@ -17,9 +17,13 @@ final class SadaaViewModel: ObservableObject {
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
     @Published var hotkeyKeycode: Int = 61
+    /// A failed dictation whose audio is retained and can be retried.
+    @Published var canRetry: Bool = false
 
     /// Set by the app layer to push a new activation key to the live HotkeyManager.
     var onHotkeyKeycodeChange: ((Int) -> Void)?
+    /// Set by the app layer to retry the last failed dictation on its audio.
+    var onRetry: (() -> Void)?
 
     private let settings: AppSettings
     private let history: DictationHistory
@@ -49,6 +53,8 @@ final class SadaaViewModel: ObservableObject {
     }
 
     func toggle() { onToggle() }
+
+    func retry() { onRetry?() }
 
     func refreshState(_ state: DictationState) { dictationState = state }
 

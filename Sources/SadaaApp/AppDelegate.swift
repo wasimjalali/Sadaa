@@ -140,7 +140,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         controller.onStateChange = { [weak self] state in
             self?.render(state: state)
             self?.viewModel?.refreshState(state)
+            self?.viewModel?.canRetry = self?.controller?.canRetry ?? false
         }
+        viewModel.onRetry = { [weak self] in self?.controller?.retryLast() }
         self.controller = controller
 
         // Voice edit gets its own recordings folder so its retention never

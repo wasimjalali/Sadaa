@@ -212,6 +212,46 @@ struct FakeProvider: TranscriptionProvider {
         #expect(controller.state == .idle)
     }
 
+    @Test func testRetryLastRecoversAfterAllProvidersFail() async throws {
+        // Spec section 5: all providers fail -> audio retained, one-click retry.
+        var attempt = 0
+        let failing = FakeProvider(name: "p1",
+                                   result: .failure(ProviderError.http(500, "boom")))
+        let working = FakeProvider(
+            name: "p2",
+            result: .success(Transcript(text: "rescued on retry",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let controller = DictationController(
+            recorder: recorder,
+            providers: { attempt += 1; return attempt == 1 ? [failing] : [working] },
+            store: store,
+            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
+            recordingsToKeep: 10,
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) })
+        controller.onStateChange = { [weak self] state in self?.states.append(state) }
+
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == [])
+        #expect(controller.canRetry)
+
+        await controller.retryLastAndWait()
+        #expect(delivered == ["rescued on retry"])
+        #expect(!controller.canRetry)
+    }
+
+    @Test func testSuccessClearsRetry() async throws {
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "hi", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeController(providers: [provider])
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(!controller.canRetry)
+    }
+
     @Test func testAllProvidersFailKeepsAudioAndReportsError() async throws {
         let failing = FakeProvider(name: "only",
                                    result: .failure(ProviderError.http(500, "boom")))

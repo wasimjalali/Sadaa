@@ -33,6 +33,12 @@ public final class DictationController {
     private var pendingRawMode = false
     private var processingTask: Task<Void, Never>?
     private var recordingStartedAt: Date?
+    /// Audio from the last dictation whose providers all failed. Spec section 5:
+    /// the recording is kept so the user can retry without re-recording.
+    private var lastFailedAudio: URL?
+
+    /// True when a failed dictation can be retried on its retained audio.
+    public var canRetry: Bool { lastFailedAudio != nil }
 
     public init(recorder: AudioRecording,
                 providers: @escaping () -> [TranscriptionProvider],
@@ -89,6 +95,25 @@ public final class DictationController {
         await processingTask?.value
     }
 
+    /// Re-runs the provider chain on the audio retained from the last failure.
+    /// Spec section 5: one-click retry, no re-recording. Ignored when busy or
+    /// when there is nothing to retry.
+    public func retryLast() {
+        guard let url = lastFailedAudio else { return }
+        switch state {
+        case .recording, .transcribing, .delivering: return
+        case .idle, .error: break
+        }
+        state = .transcribing
+        processingTask = Task { await process(audioURL: url, measuredDuration: nil) }
+    }
+
+    /// Test helper that awaits the retry.
+    public func retryLastAndWait() async {
+        retryLast()
+        await processingTask?.value
+    }
+
     public func cancel() {
         guard state == .recording else { return }
         recorder.cancel()
@@ -123,8 +148,12 @@ public final class DictationController {
         // Wall-clock recording length. The Azure json response carries no
         // duration, so this is the cost meter's only signal on the default path.
         let measuredDuration = recordingStartedAt.map { max(0, now().timeIntervalSince($0)) }
+        await process(audioURL: audioURL, measuredDuration: measuredDuration)
+    }
 
-        // state is already .transcribing (set synchronously in toggle())
+    /// Transcribes, formats, records, and delivers a recorded audio file. Shared
+    /// by the normal stop path and retryLast(). state is already .transcribing.
+    private func process(audioURL: URL, measuredDuration: Double?) async {
         let chain = providers()
         guard !chain.isEmpty else {
             state = .error("No transcription provider configured. Open Settings.")
@@ -146,11 +175,15 @@ public final class DictationController {
         }
 
         guard let transcript else {
+            // Keep the audio so the user can retry without re-recording.
+            lastFailedAudio = audioURL
             let detail = (lastError as? ProviderError).map(Self.describe)
                 ?? lastError?.localizedDescription ?? "unknown error"
             state = .error("Transcription failed: \(detail)")
             return
         }
+        // Transcription succeeded: any earlier failure is resolved.
+        lastFailedAudio = nil
 
         // No speech in the whole recording: discard with a notice. Nothing is
         // formatted, recorded, or delivered (an empty deliver would also wipe the

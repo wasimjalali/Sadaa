@@ -42,6 +42,17 @@ struct HomePage: View {
 
             MicButton(state: viewModel.dictationState) { viewModel.toggle() }
 
+            if viewModel.canRetry {
+                Button {
+                    viewModel.retry()
+                } label: {
+                    Label("Retry last dictation", systemImage: "arrow.clockwise")
+                        .font(.system(size: 13, weight: .medium))
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.navy)
+            }
+
             statusBlock
 
             recentSection
