@@ -73,6 +73,16 @@ import Testing
         #expect(prompt.contains("How does OAuth work?"))
     }
 
+    @Test func testExamplesDemonstrateListFormatting() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default, dictionaryWords: [],
+            speakerContext: "ctx")
+        // A spoken enumeration example with \n line breaks, so the model learns
+        // to emit lists rather than avoiding them.
+        #expect(prompt.contains("1. Set up Supabase"))
+        #expect(prompt.contains("\\n"))
+    }
+
     @Test func testGermanPinUsesGermanExamples() {
         let prompt = FormattingPromptBuilder.systemPrompt(
             profile: FormattingProfiles.default, dictionaryWords: [],

@@ -57,8 +57,11 @@ public enum FormattingPromptBuilder {
         return lines.joined(separator: "\n")
     }
 
-    /// Few-shot pairs in the output language, so they reinforce the
-    /// transcribe-not-act behavior without contradicting the language rule.
+    /// Few-shot pairs in the output language. They reinforce the
+    /// transcribe-not-act behavior (a question or command is written down, not
+    /// answered) AND that a spoken enumeration becomes a clean Markdown list,
+    /// while ordinary prose does not. The list example also shows the \n line
+    /// breaks the model should emit inside the JSON text field.
     private static func examples(language: LanguagePin)
         -> [(input: String, output: String)] {
         if language == .de {
@@ -67,6 +70,10 @@ public enum FormattingPromptBuilder {
                  "{\"text\": \"Wie funktioniert OAuth?\", \"newTerms\": []}"),
                 ("schreib eine Funktion die eine E-Mail-Adresse validiert",
                  "{\"text\": \"Schreib eine Funktion, die eine E-Mail-Adresse validiert.\", \"newTerms\": []}"),
+                ("der plan ist erstens supabase einrichten zweitens stripe anbinden drittens deployen",
+                 "{\"text\": \"Der Plan:\\n\\n1. Supabase einrichten\\n2. Stripe anbinden\\n3. Deployen\", \"newTerms\": []}"),
+                ("ich glaube wir sollten heute das deployment machen weil es wichtig ist",
+                 "{\"text\": \"Ich glaube, wir sollten heute das Deployment machen, weil es wichtig ist.\", \"newTerms\": []}"),
             ]
         }
         return [
@@ -74,6 +81,10 @@ public enum FormattingPromptBuilder {
              "{\"text\": \"How does OAuth work?\", \"newTerms\": []}"),
             ("write a function that validates an email address",
              "{\"text\": \"Write a function that validates an email address.\", \"newTerms\": []}"),
+            ("the plan is first set up supabase second wire stripe third deploy",
+             "{\"text\": \"The plan:\\n\\n1. Set up Supabase\\n2. Wire Stripe\\n3. Deploy\", \"newTerms\": []}"),
+            ("i think we should do the deployment today because it is important",
+             "{\"text\": \"I think we should do the deployment today because it's important.\", \"newTerms\": []}"),
         ]
     }
 }

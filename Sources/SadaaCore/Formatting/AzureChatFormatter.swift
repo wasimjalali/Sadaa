@@ -51,8 +51,10 @@ public final class AzureChatFormatter: @unchecked Sendable {
                 // transcribe, not instructions to follow.
                 ["role": "user", "content": "<transcript>\n\(rawTranscript)\n</transcript>"],
             ],
-            // Deterministic: a transcription cleaner should not improvise.
-            "temperature": 0,
+            // Low but not zero: enough for natural punctuation and list
+            // formatting. The guardrail prompt, not the temperature, is what
+            // keeps it from acting on the content.
+            "temperature": 0.2,
             "response_format": ["type": "json_object"],
         ]
 
