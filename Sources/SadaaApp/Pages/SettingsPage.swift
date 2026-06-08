@@ -40,11 +40,14 @@ struct SettingsPage: View {
 
                 Form {
                     Section("Azure OpenAI") {
-                        TextField("Endpoint (https://myres.openai.azure.com)",
+                        TextField("https://your-resource.openai.azure.com",
                                   text: $endpoint)
                         TextField("Whisper deployment name", text: $deployment)
                         TextField("API version", text: $apiVersion)
-                        SecureField("API key (stored in Keychain)", text: $apiKey)
+                        SecureField("API key", text: $apiKey)
+                        Text("Paste your endpoint and key from the Azure OpenAI resource. The grey text is just an example. Keys are saved in your macOS Keychain, never in a file.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
                         HStack {
                             Button("Save") { save() }
                                 .keyboardShortcut(.defaultAction)
@@ -71,15 +74,23 @@ struct SettingsPage: View {
                             .foregroundStyle(.secondary)
                     }
 
-                    Section("Fallback providers") {
-                        Toggle("OpenAI API fallback", isOn: $openaiEnabled)
+                    Section("Fallback providers (optional)") {
+                        Toggle("Use OpenAI if Azure fails", isOn: $openaiEnabled)
                         TextField("OpenAI model (e.g. whisper-1)", text: $openaiModel)
-                        SecureField("OpenAI API key (Keychain)", text: $openaiKey)
-                        Toggle("Azure Speech / MAI", isOn: $maiEnabled)
-                        TextField("MAI endpoint (https://res.cognitiveservices.azure.com)",
+                        SecureField("OpenAI API key", text: $openaiKey)
+                        Text("OpenAI uses api.openai.com automatically, so there is no endpoint to set. Just a key and a model name.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Toggle("Use Azure Speech (MAI)", isOn: $maiEnabled)
+                        TextField("https://your-resource.cognitiveservices.azure.com",
                                   text: $maiEndpoint)
-                        SecureField("MAI subscription key (Keychain)", text: $maiKey)
-                        Text("Providers are tried in order: Azure OpenAI, then OpenAI, then MAI.")
+                        SecureField("Azure Speech key", text: $maiKey)
+                        Text("Azure Speech is a separate Azure resource from Azure OpenAI (its key is the Ocp-Apim-Subscription-Key). Leave this off unless you have MAI-Transcribe enabled on your subscription.")
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+
+                        Text("Providers are tried in order: Azure OpenAI, then OpenAI, then Azure Speech.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                     }
