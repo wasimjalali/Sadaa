@@ -47,9 +47,12 @@ public final class AzureChatFormatter: @unchecked Sendable {
         let payload: [String: Any] = [
             "messages": [
                 ["role": "system", "content": system],
-                ["role": "user", "content": rawTranscript],
+                // Delimit the dictation so the model treats it as data to
+                // transcribe, not instructions to follow.
+                ["role": "user", "content": "<transcript>\n\(rawTranscript)\n</transcript>"],
             ],
-            "temperature": 0.2,
+            // Deterministic: a transcription cleaner should not improvise.
+            "temperature": 0,
             "response_format": ["type": "json_object"],
         ]
 

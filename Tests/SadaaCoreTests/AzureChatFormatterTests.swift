@@ -29,7 +29,7 @@ import Foundation
         let messages = json["messages"] as! [[String: String]]
         #expect(messages.first?["role"] == "system")
         #expect(messages.first?["content"]?.contains("code editor or terminal") == true)
-        #expect(messages.last?["content"] == "hello")
+        #expect(messages.last?["content"] == "<transcript>\nhello\n</transcript>")
     }
 
     @Test func testParseStructuredJSON() throws {
