@@ -28,4 +28,14 @@ import Testing
             speakerContext: "ctx")
         #expect(!prompt.contains("Enforce these exact spellings"))
     }
+
+    @Test func testInstructsListFormatting() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default,
+            dictionaryWords: [],
+            speakerContext: "ctx")
+        #expect(prompt.contains("Lists:"))
+        #expect(prompt.contains("Markdown list"))
+        #expect(prompt.contains("Do NOT turn ordinary sentences"))
+    }
 }

@@ -12,16 +12,20 @@ enum DeliveryOutcome {
 struct TextInserter {
     @discardableResult
     func deliver(_ text: String) -> DeliveryOutcome {
-        // 1. Clipboard backup, always.
+        // 1. Clipboard, always (also the backup the user can re-paste).
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()
         pasteboard.setString(text, forType: .string)
 
-        // 2. Try Accessibility insertion at the caret.
-        if axInsert(text) { return .insertedViaAX }
-
-        // 3. Fall back to synthetic Cmd-V (clipboard already holds the text).
+        // 2. Synthetic Cmd-V FIRST. Paste routes through each app's normal paste
+        // handling, so it lands in terminals, Electron and web fields. Writing
+        // kAXSelectedText is unreliable there: Terminal, for one, reports
+        // success but inserts nothing, which previously swallowed the text.
         if synthesizePaste() { return .pasted }
+
+        // 3. Fall back to direct AX insertion at the caret (e.g. when synthetic
+        // events can't be posted).
+        if axInsert(text) { return .insertedViaAX }
 
         return .clipboardOnly
     }
