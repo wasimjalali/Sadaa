@@ -28,6 +28,7 @@ public final class DictationController {
     private let context: () -> FormattingContext
     private let suggestTerms: ([String]) -> Void
     private let formatterFellBack: () -> Void
+    private let servedByFallback: (String) -> Void
     private let now: () -> Date
     private let isSecureInputActive: () -> Bool
     private var pendingRawMode = false
@@ -54,6 +55,7 @@ public final class DictationController {
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
                 formatterFellBack: @escaping () -> Void = {},
+                servedByFallback: @escaping (String) -> Void = { _ in },
                 now: @escaping () -> Date = { Date() },
                 isSecureInputActive: @escaping () -> Bool = { false }) {
         self.recorder = recorder
@@ -67,6 +69,7 @@ public final class DictationController {
         self.context = context
         self.suggestTerms = suggestTerms
         self.formatterFellBack = formatterFellBack
+        self.servedByFallback = servedByFallback
         self.now = now
         self.isSecureInputActive = isSecureInputActive
         self.recorder.onAutoStop = { [weak self] in
@@ -162,12 +165,14 @@ public final class DictationController {
 
         var transcript: Transcript?
         var usedProvider: String?
+        var usedFromFallback = false
         var lastError: Error?
-        for provider in chain {
+        for (index, provider) in chain.enumerated() {
             do {
                 transcript = try await provider.transcribe(audio: audioURL,
                                                             hint: hint())
                 usedProvider = provider.name
+                usedFromFallback = index > 0
                 break
             } catch {
                 lastError = error
@@ -220,6 +225,8 @@ public final class DictationController {
         deliver(finalText)
         try? store.prune(keep: recordingsToKeep)
         state = .idle
+        // Tell the user their primary was down and a fallback served them.
+        if usedFromFallback, let usedProvider { servedByFallback(usedProvider) }
     }
 
     private static func describe(_ error: ProviderError) -> String {

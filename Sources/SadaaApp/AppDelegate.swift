@@ -22,8 +22,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
     private var currentLevel: Float = 0
-    private var recordingActive = false
     private var axPollTimer: Timer?
+
+    /// A dictation is mid-flight (recording or processing).
+    private var isDictationBusy: Bool {
+        switch controller?.state {
+        case .recording, .transcribing, .delivering: return true
+        default: return false
+        }
+    }
+    /// A voice edit is mid-flight (recording or rewriting).
+    private var isVoiceEditBusy: Bool {
+        switch voiceEditController?.state {
+        case .recording, .rewriting: return true
+        default: return false
+        }
+    }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         setUpStatusItem()
@@ -133,6 +147,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             formatterFellBack: { [weak self] in
                 self?.hud.show(.error("Inserted raw text (formatter offline)."))
+                self?.hud.hide(after: 4)
+            },
+            servedByFallback: { [weak self] name in
+                self?.hud.show(.error("Used \(name). Your primary provider was unavailable."))
                 self?.hud.hide(after: 4)
             },
             isSecureInputActive: { IsSecureEventInputEnabled() }
@@ -301,15 +319,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.hotkeys.activationKeycode = Int64(code)
         }
         hotkeys.onToggle = { [weak self] in
+            guard let self else { return }
+            // Don't start a dictation while a voice edit is mid-flight.
+            guard !self.isVoiceEditBusy else {
+                self.hud.show(.error("Finish the voice edit first."))
+                self.hud.hide(after: 3)
+                return
+            }
             let raw = NSEvent.modifierFlags.contains(.shift)
-            self?.controller?.toggle(rawMode: raw)
+            self.controller?.toggle(rawMode: raw)
         }
         hotkeys.onCancel = { [weak self] in
-            self?.controller?.cancel()
-            self?.voiceEditController?.cancel()
+            // Route Esc to whichever flow is actually recording.
+            if self?.controller?.state == .recording {
+                self?.controller?.cancel()
+            } else if self?.voiceEditController?.state == .recording {
+                self?.voiceEditController?.cancel()
+            }
         }
         hotkeys.onVoiceEdit = { [weak self] in
             guard let self else { return }
+            // Don't start a voice edit while a dictation is mid-flight.
+            guard !self.isDictationBusy else {
+                self.hud.show(.error("Finish dictating first."))
+                self.hud.hide(after: 3)
+                return
+            }
             guard Self.buildFormatter(settings: self.settings) != nil else {
                 self.hud.show(.error("Set a GPT deployment in Settings to use voice edit."))
                 self.hud.hide(after: 5)
@@ -318,7 +353,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self.voiceEditController?.toggle()
         }
         hotkeys.isRecordingActive = { [weak self] in
-            self?.recordingActive ?? false
+            self?.controller?.state == .recording
+                || self?.voiceEditController?.state == .recording
         }
 
         // Gate on real trust first. CGEvent.tapCreate returns a non-nil but
@@ -364,23 +400,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func render(state: DictationState) {
         switch state {
         case .idle:
-            recordingActive = false
             stopRecordingTimer()
             setIcon("waveform", tint: nil)
             hud.hide(after: 0.4)
         case .recording:
-            recordingActive = true
             startRecordingTimer()
             setIcon("record.circle.fill", tint: .systemRed)
         case .transcribing:
-            recordingActive = false
             stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
         case .delivering:
             hud.show(.delivering)
         case .error(let message):
-            recordingActive = false
             stopRecordingTimer()
             setIcon("waveform", tint: nil)
             hud.show(.error(message))
@@ -391,19 +423,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private func renderVoiceEdit(_ state: VoiceEditState) {
         switch state {
         case .idle:
-            recordingActive = false
             setIcon("waveform", tint: nil)
             hud.hide(after: 0.4)
         case .recording:
-            recordingActive = true   // let Esc cancel the voice edit too
             setIcon("pencil", tint: .systemRed)
             hud.show(.recording(seconds: 0, level: 0))
         case .rewriting:
-            recordingActive = false
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
         case .error(let message):
-            recordingActive = false
             setIcon("waveform", tint: nil)
             hud.show(.error(message))
             hud.hide(after: 6)

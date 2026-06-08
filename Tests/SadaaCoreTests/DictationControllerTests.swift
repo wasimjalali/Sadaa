@@ -212,6 +212,50 @@ struct FakeProvider: TranscriptionProvider {
         #expect(controller.state == .idle)
     }
 
+    @Test func testServedByFallbackFiresWhenSecondaryUsed() async throws {
+        // Spec section 5: non-primary provider use is surfaced.
+        let failing = FakeProvider(name: "primary",
+                                   result: .failure(ProviderError.http(500, "x")))
+        let working = FakeProvider(
+            name: "secondary",
+            result: .success(Transcript(text: "ok", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        var fallbackNoted: String?
+        let controller = DictationController(
+            recorder: recorder,
+            providers: { [failing, working] },
+            store: store,
+            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
+            recordingsToKeep: 10,
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) },
+            servedByFallback: { name in fallbackNoted = name })
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == ["ok"])
+        #expect(fallbackNoted == "secondary")
+    }
+
+    @Test func testServedByFallbackSilentWhenPrimaryWorks() async throws {
+        let working = FakeProvider(
+            name: "primary",
+            result: .success(Transcript(text: "ok", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        var fallbackNoted: String?
+        let controller = DictationController(
+            recorder: recorder,
+            providers: { [working] },
+            store: store,
+            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
+            recordingsToKeep: 10,
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) },
+            servedByFallback: { name in fallbackNoted = name })
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(fallbackNoted == nil)
+    }
+
     @Test func testRetryLastRecoversAfterAllProvidersFail() async throws {
         // Spec section 5: all providers fail -> audio retained, one-click retry.
         var attempt = 0
