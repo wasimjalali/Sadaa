@@ -1,19 +1,56 @@
 import AppKit
 import SadaaCore
 
+/// The activation keys a user can pick for toggling dictation. All are modifier
+/// keys that produce a clean tap without typing a character.
+struct HotkeyOption: Identifiable, Hashable {
+    let label: String
+    let keycode: Int
+    var id: Int { keycode }
+
+    static let all: [HotkeyOption] = [
+        .init(label: "Right Option", keycode: 61),
+        .init(label: "Left Option", keycode: 58),
+        .init(label: "Right Command", keycode: 54),
+        .init(label: "Right Control", keycode: 62),
+        .init(label: "Right Shift", keycode: 60),
+        .init(label: "Fn / Globe", keycode: 63),
+    ]
+
+    static func label(for keycode: Int) -> String {
+        all.first { $0.keycode == keycode }?.label ?? "Right Option"
+    }
+}
+
 /// System-wide key listener via CGEventTap.
 /// - Right Option tap -> onToggle
 /// - Esc while recording -> onCancel (the Esc event is consumed)
 /// Requires Accessibility trust. Spec sections 4 and 8.
 final class HotkeyManager {
-    private static let rightOptionKeycode: Int64 = 61
     private static let escapeKeycode: Int64 = 53
     private static let eKeycode: Int64 = 14
+
+    /// The modifier key whose tap toggles dictation. Default Right Option (61).
+    /// Updatable live: the tap listens to all flagsChanged and filters here, so
+    /// changing this takes effect without restarting the tap.
+    var activationKeycode: Int64 = 61
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
     /// Ctrl+Option+E: voice-edit the current selection. Spec section 8.
     var onVoiceEdit: (() -> Void)?
+
+    /// The flag a given modifier keycode sets while held, used to read down/up.
+    static func flagMask(for keycode: Int64) -> CGEventFlags {
+        switch keycode {
+        case 61, 58: return .maskAlternate     // right / left option
+        case 54, 55: return .maskCommand        // right / left command
+        case 62, 59: return .maskControl        // right / left control
+        case 60: return .maskShift              // right shift
+        case 63: return .maskSecondaryFn        // fn / globe
+        default: return .maskAlternate
+        }
+    }
     /// The app layer tells us whether a recording is active so we know
     /// when Esc belongs to us.
     var isRecordingActive: (() -> Bool) = { false }
@@ -74,13 +111,12 @@ final class HotkeyManager {
         let now = ProcessInfo.processInfo.systemUptime
 
         switch type {
-        case .flagsChanged where keycode == Self.rightOptionKeycode:
-            // .maskAlternate is set when EITHER option key is down. We rely on
-            // having already filtered to keycode 61, so this means right option.
-            // Edge case not handled (MVP): if left option is also held, the up
-            // event for right option still shows maskAlternate set, so the tap
-            // won't register. Acceptable for now.
-            let isDown = event.flags.contains(.maskAlternate)
+        case .flagsChanged where keycode == activationKeycode:
+            // The mask is set when EITHER side of the modifier is down. We have
+            // already filtered to the specific keycode, so this is our key.
+            // Edge case (unchanged): holding the other side of the same modifier
+            // keeps the mask set, so the up event won't register. Acceptable.
+            let isDown = event.flags.contains(Self.flagMask(for: keycode))
             let fired = recognizer.handle(isDown ? .rightOptionDown(at: now)
                                                  : .rightOptionUp(at: now))
             if fired {

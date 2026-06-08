@@ -13,6 +13,7 @@ public final class AppSettings {
         static let languagePin = "languagePin"
         static let silenceTimeout = "silenceTimeout"
         static let recordingsToKeep = "recordingsToKeep"
+        static let hotkeyKeycode = "hotkeyKeycode"
         static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
         static let speakerContext = "speakerContext"
@@ -64,6 +65,12 @@ public final class AppSettings {
     public var recordingsToKeep: Int {
         get { defaults.object(forKey: Keys.recordingsToKeep) as? Int ?? 10 }
         set { defaults.set(newValue, forKey: Keys.recordingsToKeep) }
+    }
+
+    /// Virtual keycode of the activation modifier key. Default 61 = Right Option.
+    public var hotkeyKeycode: Int {
+        get { defaults.object(forKey: Keys.hotkeyKeycode) as? Int ?? 61 }
+        set { defaults.set(newValue, forKey: Keys.hotkeyKeycode) }
     }
 
     /// Azure GPT deployment used for smart formatting. Spec section 3.6.

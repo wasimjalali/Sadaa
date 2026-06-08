@@ -109,8 +109,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 self.viewModel?.refreshRecent()
                 self.viewModel?.refreshCost()
             },
-            format: Self.buildFormatter(settings: settings).map { formatter in
-                { raw, ctx in try await formatter.format(rawTranscript: raw, context: ctx) }
+            format: { [settings] raw, ctx in
+                // Rebuilt per dictation so toggling formatting or editing the
+                // GPT deployment applies immediately, with no relaunch. When
+                // unconfigured we hand back the raw text unchanged.
+                guard let formatter = Self.buildFormatter(settings: settings) else {
+                    return FormattingResult(text: raw, newTerms: [])
+                }
+                return try await formatter.format(rawTranscript: raw, context: ctx)
             },
             context: { [settings, dictionary, snippets] in
                 FormattingContext(
@@ -135,15 +141,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         self.controller = controller
 
-        setUpVoiceEdit(store: store, dictionary: dictionary, snippets: snippets)
+        // Voice edit gets its own recordings folder so its retention never
+        // competes with dictation's.
+        let voiceEditStore = (try? RecordingStore(
+            directory: sadaaDir.appendingPathComponent("VoiceEditRecordings"))) ?? store
+        setUpVoiceEdit(store: voiceEditStore, dictionary: dictionary, snippets: snippets)
     }
 
     /// Voice edit gets its own recorder so it never fights the dictation flow.
-    /// Only wired when a GPT formatter is configured (it does the rewrite).
+    /// The formatter is resolved per use so configuring GPT later works without
+    /// a relaunch; the rewrite throws a clear error when it is not configured.
     private func setUpVoiceEdit(store: RecordingStore,
                                 dictionary: DictionaryStore,
                                 snippets: SnippetStore) {
-        guard let formatter = Self.buildFormatter(settings: settings) else { return }
         let recorder = AudioRecorder(silenceTimeout: settings.silenceTimeout)
         let controller = VoiceEditController(
             recorder: recorder,
@@ -155,6 +165,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             },
             readSelection: { Self.readSelection() },
             rewrite: { [settings, dictionary, snippets] selection, instruction in
+                guard let formatter = Self.buildFormatter(settings: settings) else {
+                    throw ProviderError.notConfigured(
+                        "Set a GPT deployment in Settings to use voice edit.")
+                }
                 let context = FormattingContext(
                     appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
                     dictionaryWords: dictionary.biasList(budget: 50),
@@ -179,7 +193,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         var focusedRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
                 systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-              let focusedRef else { return nil }
+              let focusedRef,
+              CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else { return nil }
         let element = focusedRef as! AXUIElement
         var selRef: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
@@ -240,6 +255,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startHotkeys() {
+        hotkeys.activationKeycode = Int64(settings.hotkeyKeycode)
+        viewModel?.onHotkeyKeycodeChange = { [weak self] code in
+            self?.hotkeys.activationKeycode = Int64(code)
+        }
         hotkeys.onToggle = { [weak self] in
             let raw = NSEvent.modifierFlags.contains(.shift)
             self?.controller?.toggle(rawMode: raw)
@@ -250,18 +269,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
         hotkeys.onVoiceEdit = { [weak self] in
             guard let self else { return }
-            if let voiceEdit = self.voiceEditController {
-                voiceEdit.toggle()
-            } else {
+            guard Self.buildFormatter(settings: self.settings) != nil else {
                 self.hud.show(.error("Set a GPT deployment in Settings to use voice edit."))
                 self.hud.hide(after: 5)
+                return
             }
+            self.voiceEditController?.toggle()
         }
         hotkeys.isRecordingActive = { [weak self] in
             self?.recordingActive ?? false
         }
 
-        if tryStartHotkeys() { return }
+        // Gate on real trust first. CGEvent.tapCreate returns a non-nil but
+        // DEAD tap when the process is not Accessibility-trusted, so checking
+        // tap != nil is not enough - we would early-return and never start the
+        // poll, leaving the hotkey dead until a full relaunch.
+        if AXIsProcessTrusted() && tryStartHotkeys() { return }
 
         // Not Accessibility-trusted yet. Poll until the user grants it, then
         // start the tap without requiring a relaunch.
@@ -281,12 +304,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         }
     }
 
-    /// Attempts to start the global hotkey tap. Returns true on success.
+    /// Attempts to start the global hotkey tap. Returns true on success, and
+    /// publishes the active state so the Settings UI reflects reality.
+    @discardableResult
     private func tryStartHotkeys() -> Bool {
         do {
             try hotkeys.start()
+            viewModel?.hotkeyActive = true
             return true
         } catch {
+            viewModel?.hotkeyActive = false
             return false
         }
     }
@@ -385,7 +412,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(openItem)
         menu.addItem(.separator())
 
-        let toggleItem = NSMenuItem(title: "Start/Stop Dictation (Right Option)",
+        let toggleItem = NSMenuItem(title: "Start/Stop Dictation",
                                     action: #selector(menuToggle),
                                     keyEquivalent: "")
         toggleItem.target = self

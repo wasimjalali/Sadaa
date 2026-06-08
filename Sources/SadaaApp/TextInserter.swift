@@ -32,7 +32,8 @@ struct TextInserter {
         var focusedRef: CFTypeRef?
         let focusErr = AXUIElementCopyAttributeValue(
             systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef)
-        guard focusErr == .success, let focusedRef else { return false }
+        guard focusErr == .success, let focusedRef,
+              CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else { return false }
         let element = focusedRef as! AXUIElement
 
         // Writing kAXSelectedText replaces the selection (or inserts at the

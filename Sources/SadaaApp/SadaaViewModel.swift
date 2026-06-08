@@ -14,6 +14,12 @@ final class SadaaViewModel: ObservableObject {
     @Published var snippets: [Snippet] = []
     @Published var notes: [Note] = []
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
+    /// Whether the global hotkey tap is actually running (Accessibility granted).
+    @Published var hotkeyActive: Bool = false
+    @Published var hotkeyKeycode: Int = 61
+
+    /// Set by the app layer to push a new activation key to the live HotkeyManager.
+    var onHotkeyKeycodeChange: ((Int) -> Void)?
 
     private let settings: AppSettings
     private let history: DictationHistory
@@ -58,6 +64,13 @@ final class SadaaViewModel: ObservableObject {
             !settings.azureDeployment.isEmpty &&
             (Keychain.get(account: "azure-openai-key")?.isEmpty == false)
         languagePin = settings.languagePin
+        hotkeyKeycode = settings.hotkeyKeycode
+    }
+
+    func setHotkeyKeycode(_ code: Int) {
+        settings.hotkeyKeycode = code
+        hotkeyKeycode = code
+        onHotkeyKeycodeChange?(code)
     }
 
     // MARK: - Dictionary
