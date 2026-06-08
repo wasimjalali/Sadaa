@@ -239,6 +239,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         guard AXIsProcessTrusted() else { return nil }
         let pasteboard = NSPasteboard.general
         let saved = Clipboard.snapshot(pasteboard)
+
+        // Let the trigger key (Right Option) fully release first, otherwise the
+        // combined session state merges it and the synthetic Cmd-C becomes
+        // Cmd-Option-C, which copies nothing.
+        usleep(60_000)   // 60ms
+
         let before = pasteboard.changeCount
         guard let source = CGEventSource(stateID: .combinedSessionState),
               let down = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: true),  // C
@@ -249,12 +255,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         down.post(tap: .cghidEventTap)
         up.post(tap: .cghidEventTap)
 
+        // Wait up to 600ms for the copy to land; some apps (Electron, browsers)
+        // are slow. 200ms was missing those and reporting "select text first".
         var copied: String?
-        let deadline = Date().addingTimeInterval(0.2)
+        let deadline = Date().addingTimeInterval(0.6)
         while Date() < deadline {
             if pasteboard.changeCount != before {
                 copied = pasteboard.string(forType: .string)
-                break
+                if copied != nil { break }
             }
             usleep(10_000)   // 10ms
         }
