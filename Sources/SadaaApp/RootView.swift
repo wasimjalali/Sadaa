@@ -97,7 +97,7 @@ struct RootView: View {
         case .home:
             HomePage(viewModel: viewModel)
         case .dictionary:
-            DictionaryPage()
+            DictionaryPage(viewModel: viewModel)
         case .history:
             HistoryPage(viewModel: viewModel)
         case .settings:

@@ -1,24 +1,133 @@
 import SwiftUI
+import SadaaCore
 
-/// Placeholder for the custom dictionary feature. No controls yet, just a
-/// Karko-styled empty state describing what is coming.
+/// Personal dictionary manager: pending formatter suggestions to accept or
+/// dismiss, an add-word row, and the current entries with delete. Karko styled.
 struct DictionaryPage: View {
-    var body: some View {
-        VStack(spacing: 14) {
-            Image(systemName: "character.book.closed")
-                .font(.system(size: 56, weight: .regular))
-                .foregroundStyle(Theme.gold)
+    @ObservedObject var viewModel: SadaaViewModel
 
-            Text("Custom dictionary")
-                .font(.system(size: 18, weight: .semibold))
+    @State private var newWord = ""
+    @State private var newSoundsLike = ""
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                Text("Dictionary")
+                    .font(.system(size: 22, weight: .bold))
+                    .foregroundStyle(Theme.charcoal)
+
+                if !viewModel.dictionarySuggestions.isEmpty {
+                    suggestionsSection
+                }
+
+                addSection
+                entriesSection
+            }
+            .padding(32)
+            .frame(maxWidth: 620, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .topLeading)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+    }
+
+    // MARK: - Suggestions
+
+    private var suggestionsSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Suggestions")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.charcoal)
+            Text("Terms Sadaa had to guess. Accept the ones worth keeping.")
+                .font(.caption)
+                .foregroundStyle(Theme.charcoal.opacity(0.6))
+
+            ForEach(viewModel.dictionarySuggestions, id: \.self) { term in
+                HStack {
+                    Image(systemName: "sparkles")
+                        .foregroundStyle(Theme.gold)
+                    Text(term)
+                        .foregroundStyle(Theme.charcoal)
+                    Spacer()
+                    Button("Add") { viewModel.acceptSuggestion(term) }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.sage)
+                    Button("Dismiss") { viewModel.dismissSuggestion(term) }
+                        .buttonStyle(.bordered)
+                }
+                .padding(12)
+                .background(Theme.creamSurface)
+                .clipShape(RoundedRectangle(cornerRadius: 10))
+            }
+        }
+    }
+
+    // MARK: - Add
+
+    private var addSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Add a word")
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Theme.charcoal)
+            HStack(spacing: 8) {
+                TextField("Word (e.g. Karko AI)", text: $newWord)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Sounds like (optional)", text: $newSoundsLike)
+                    .textFieldStyle(.roundedBorder)
+                Button("Add") { add() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.navy)
+                    .disabled(newWord.trimmingCharacters(in: .whitespaces).isEmpty)
+            }
+        }
+    }
+
+    private func add() {
+        let word = newWord.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !word.isEmpty else { return }
+        viewModel.addDictionaryWord(word, soundsLike: newSoundsLike
+            .trimmingCharacters(in: .whitespacesAndNewlines))
+        newWord = ""
+        newSoundsLike = ""
+    }
+
+    // MARK: - Entries
+
+    private var entriesSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Your words")
+                .font(.system(size: 15, weight: .semibold))
                 .foregroundStyle(Theme.charcoal)
 
-            Text("Teach Sadaa your names and jargon. Arriving in the next update.")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.charcoal.opacity(0.6))
-                .multilineTextAlignment(.center)
+            if viewModel.dictionaryEntries.isEmpty {
+                Text("No words yet. Add the names and jargon Sadaa keeps getting wrong.")
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.charcoal.opacity(0.6))
+            } else {
+                ForEach(viewModel.dictionaryEntries) { entry in
+                    HStack {
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(entry.word)
+                                .foregroundStyle(Theme.charcoal)
+                            if let alias = entry.soundsLike, !alias.isEmpty {
+                                Text("sounds like \(alias)")
+                                    .font(.caption)
+                                    .foregroundStyle(Theme.charcoal.opacity(0.55))
+                            }
+                        }
+                        Spacer()
+                        Button {
+                            viewModel.removeDictionaryEntry(entry.id)
+                        } label: {
+                            Image(systemName: "trash")
+                                .foregroundStyle(Theme.charcoal.opacity(0.6))
+                        }
+                        .buttonStyle(.plain)
+                    }
+                    .padding(12)
+                    .background(Theme.creamSurface)
+                    .clipShape(RoundedRectangle(cornerRadius: 10))
+                }
+            }
         }
-        .padding(32)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }

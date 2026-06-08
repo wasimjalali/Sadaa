@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private let mainWindow = MainWindowController()
     private var viewModel: SadaaViewModel?
     private var history: DictationHistory?
+    private var dictionary: DictionaryStore?
     private var controller: DictationController?
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
@@ -56,9 +57,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             fileURL: sadaaDir.appendingPathComponent("history.json"))
         self.history = history
 
+        let dictionary = DictionaryStore(
+            fileURL: sadaaDir.appendingPathComponent("dictionary.json"))
+        self.dictionary = dictionary
+
         let viewModel = SadaaViewModel(
             settings: settings,
             history: history,
+            dictionary: dictionary,
             onToggle: { [weak self] in self?.controller?.toggle() })
         self.viewModel = viewModel
 
@@ -66,9 +72,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             recorder: recorder,
             providers: { [settings] in Self.buildProviders(settings: settings) },
             store: store,
-            hint: { [settings] in
+            hint: { [settings, dictionary] in
                 TranscriptionHint(languagePin: settings.languagePin,
-                                  dictionaryWords: [])
+                                  dictionaryWords: dictionary.biasList(budget: 50))
             },
             recordingsToKeep: settings.recordingsToKeep,
             deliver: { [weak self] text in
@@ -81,6 +87,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             record: { [weak self] record in
                 self?.history?.append(record)
                 self?.viewModel?.refreshRecent()
+            },
+            format: Self.buildFormatter(settings: settings).map { formatter in
+                { raw, ctx in try await formatter.format(rawTranscript: raw, context: ctx) }
+            },
+            context: { [settings, dictionary] in
+                FormattingContext(
+                    appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                    dictionaryWords: dictionary.biasList(budget: 50),
+                    speakerContext: settings.speakerContext,
+                    language: settings.languagePin)
+            },
+            suggestTerms: { [weak self] terms in
+                self?.dictionary?.suggest(terms)
+                self?.viewModel?.refreshDictionary()
+            },
+            formatterFellBack: { [weak self] in
+                self?.hud.show(.error("Inserted raw text (formatter offline)."))
+                self?.hud.hide(after: 4)
             }
         )
         controller.onStateChange = { [weak self] state in
@@ -105,8 +129,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return [AzureOpenAIProvider(config: config)]
     }
 
+    /// Builds the smart formatter from settings, or nil when formatting is off
+    /// or unconfigured (in which case dictations are delivered raw).
+    private static func buildFormatter(settings: AppSettings) -> AzureChatFormatter? {
+        guard settings.formattingEnabled,
+              !settings.gptDeployment.isEmpty,
+              let endpoint = URL(string: settings.azureEndpoint),
+              !settings.azureEndpoint.isEmpty,
+              let key = Keychain.get(account: "azure-openai-key")
+        else { return nil }
+        let config = AzureChatFormatter.Config(
+            endpoint: endpoint, apiKey: key,
+            deployment: settings.gptDeployment,
+            apiVersion: settings.azureAPIVersion)
+        return AzureChatFormatter(config: config)
+    }
+
     private func startHotkeys() {
-        hotkeys.onToggle = { [weak self] in self?.controller?.toggle() }
+        hotkeys.onToggle = { [weak self] in
+            let raw = NSEvent.modifierFlags.contains(.shift)
+            self?.controller?.toggle(rawMode: raw)
+        }
         hotkeys.onCancel = { [weak self] in self?.controller?.cancel() }
         hotkeys.isRecordingActive = { [weak self] in
             self?.recordingActive ?? false
