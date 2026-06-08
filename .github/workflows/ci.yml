@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build-and-test:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Swift version
+        run: swift --version
+
+      - name: Build (release)
+        run: swift build -c release
+
+      - name: Run tests
+        # Xcode's toolchain ships Swift Testing, so plain `swift test` works on
+        # CI (the Makefile's framework copy is only needed on the Command Line
+        # Tools-only dev machine).
+        run: swift test
