@@ -39,13 +39,14 @@ struct SettingsPage: View {
                     .padding(.bottom, 20)
 
                 Form {
-                    Section("Azure OpenAI") {
-                        TextField("https://your-resource.openai.azure.com",
+                    Section("Azure OpenAI / Foundry") {
+                        TextField("https://your-resource.services.ai.azure.com",
                                   text: $endpoint)
-                        TextField("Whisper deployment name", text: $deployment)
+                        TextField("Transcription deployment (e.g. gpt-4o-mini-transcribe)",
+                                  text: $deployment)
                         TextField("API version", text: $apiVersion)
                         SecureField("API key", text: $apiKey)
-                        Text("Paste your endpoint and key from the Azure OpenAI resource. The grey text is just an example. Keys are saved in your macOS Keychain, never in a file.")
+                        Text("Works with Azure OpenAI and Azure AI Foundry. Paste the resource endpoint (the Foundry project URL also works). The deployment is your transcription model, not the chat one. Keys are saved in your macOS Keychain, never in a file.")
                             .font(.caption)
                             .foregroundStyle(.secondary)
                         HStack {

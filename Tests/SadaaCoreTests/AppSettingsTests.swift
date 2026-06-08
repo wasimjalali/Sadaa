@@ -14,7 +14,7 @@ import Foundation
     }
 
     @Test func testDefaults() {
-        #expect(settings.azureAPIVersion == "2024-10-21")
+        #expect(settings.azureAPIVersion == "2025-03-01-preview")
         #expect(settings.languagePin == .auto)
         #expect(settings.silenceTimeout == 60)
         #expect(settings.recordingsToKeep == 10)

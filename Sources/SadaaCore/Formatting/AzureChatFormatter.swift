@@ -37,7 +37,7 @@ public final class AzureChatFormatter: @unchecked Sendable {
             snippets: context.snippets)
 
         var components = URLComponents(
-            url: config.endpoint.appendingPathComponent(
+            url: AzureOpenAIProvider.baseURL(from: config.endpoint).appendingPathComponent(
                 "openai/deployments/\(config.deployment)/chat/completions"),
             resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "api-version",
@@ -91,7 +91,7 @@ public final class AzureChatFormatter: @unchecked Sendable {
                                    instruction: String,
                                    context: FormattingContext) throws -> URLRequest {
         var components = URLComponents(
-            url: config.endpoint.appendingPathComponent(
+            url: AzureOpenAIProvider.baseURL(from: config.endpoint).appendingPathComponent(
                 "openai/deployments/\(config.deployment)/chat/completions"),
             resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "api-version",

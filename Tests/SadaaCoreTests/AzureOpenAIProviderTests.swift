@@ -30,7 +30,7 @@ import Foundation
             .hasPrefix("multipart/form-data; boundary="))
 
         let body = String(decoding: request.httpBody!, as: UTF8.self)
-        #expect(body.contains("name=\"response_format\"\r\n\r\nverbose_json"))
+        #expect(body.contains("name=\"response_format\"\r\n\r\njson"))
         #expect(body.contains("name=\"temperature\"\r\n\r\n0"))
         #expect(!body.contains("name=\"language\""), "auto pin omits language")
         #expect(!body.contains("name=\"prompt\""), "empty dictionary omits prompt")
@@ -45,6 +45,23 @@ import Foundation
         let body = String(decoding: request.httpBody!, as: UTF8.self)
         #expect(body.contains("name=\"language\"\r\n\r\nde"))
         #expect(body.contains("name=\"prompt\"\r\n\r\nKarko, Supabase"))
+    }
+
+    @Test func testFoundryProjectEndpointNormalizesToHost() throws {
+        let foundryConfig = AzureOpenAIProvider.Config(
+            endpoint: URL(string: "https://open-whisper-models-resource.services.ai.azure.com/api/projects/open_whisper_models")!,
+            apiKey: "k", deployment: "gpt-4o-mini-transcribe", apiVersion: "2025-03-01-preview")
+        let provider = AzureOpenAIProvider(config: foundryConfig)
+        let request = try provider.makeRequest(audio: Data([0x01]), filename: "a.wav",
+            hint: TranscriptionHint(languagePin: .auto, dictionaryWords: []))
+        #expect(request.url?.absoluteString ==
+            "https://open-whisper-models-resource.services.ai.azure.com/openai/deployments/gpt-4o-mini-transcribe/audio/transcriptions?api-version=2025-03-01-preview")
+    }
+
+    @Test func testBaseURLStripsPathAndTrailingSlash() {
+        let base = AzureOpenAIProvider.baseURL(
+            from: URL(string: "https://res.services.ai.azure.com/api/projects/p/")!)
+        #expect(base.absoluteString == "https://res.services.ai.azure.com")
     }
 
     @Test func testParseVerboseJSON() throws {

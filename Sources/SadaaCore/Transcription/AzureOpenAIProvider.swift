@@ -28,17 +28,33 @@ public final class AzureOpenAIProvider: TranscriptionProvider, @unchecked Sendab
         self.session = session
     }
 
+    /// Reduces a pasted endpoint to scheme://host so the OpenAI REST path can be
+    /// appended cleanly. This lets users paste either the classic Azure OpenAI
+    /// endpoint (https://res.openai.azure.com) or an Azure AI Foundry project
+    /// URL (https://res.services.ai.azure.com/api/projects/name) and have both
+    /// resolve to the right base.
+    static func baseURL(from endpoint: URL) -> URL {
+        var components = URLComponents()
+        components.scheme = endpoint.scheme ?? "https"
+        components.host = endpoint.host
+        components.port = endpoint.port
+        return components.url ?? endpoint
+    }
+
     public func makeRequest(audio: Data, filename: String,
                             hint: TranscriptionHint) throws -> URLRequest {
         var components = URLComponents(
-            url: config.endpoint
+            url: Self.baseURL(from: config.endpoint)
                 .appendingPathComponent("openai/deployments/\(config.deployment)/audio/transcriptions"),
             resolvingAgainstBaseURL: false)!
         components.queryItems = [URLQueryItem(name: "api-version",
                                               value: config.apiVersion)]
 
         var body = MultipartBody()
-        body.addField(name: "response_format", value: "verbose_json")
+        // "json" works for whisper-1 AND the gpt-4o-transcribe family. The newer
+        // models reject "verbose_json", so we never ask for it (we lose the
+        // detected language and duration fields, both optional downstream).
+        body.addField(name: "response_format", value: "json")
         body.addField(name: "temperature", value: "0")
         if hint.languagePin != .auto {
             body.addField(name: "language", value: hint.languagePin.rawValue)

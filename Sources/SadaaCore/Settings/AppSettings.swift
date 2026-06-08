@@ -42,8 +42,10 @@ public final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.azureDeployment) }
     }
 
+    /// Default supports the gpt-4o-transcribe family (whisper-1 too). The older
+    /// 2024-10-21 GA predates those models and rejects them.
     public var azureAPIVersion: String {
-        get { defaults.string(forKey: Keys.azureAPIVersion) ?? "2024-10-21" }
+        get { defaults.string(forKey: Keys.azureAPIVersion) ?? "2025-03-01-preview" }
         set { defaults.set(newValue, forKey: Keys.azureAPIVersion) }
     }
 
