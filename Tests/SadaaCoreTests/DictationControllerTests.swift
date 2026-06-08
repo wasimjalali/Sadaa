@@ -225,6 +225,31 @@ struct FakeProvider: TranscriptionProvider {
         #expect(FileManager.default.fileExists(atPath: recorder.startedURL!.path))
     }
 
+    @Test func testEmptyTranscriptIsDiscardedNothingInsertedOrBilled() async throws {
+        // Spec section 5: no speech detected -> discard, nothing inserted, nothing
+        // billed beyond the STT call. A whitespace-only result must not be
+        // formatted, recorded, or delivered (delivery would also clobber clipboard).
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "   \n ", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        var formatterRan = false
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            formatterRan = true
+            return FormattingResult(text: "WRONG", newTerms: [])
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == [])
+        #expect(records.isEmpty)
+        #expect(!formatterRan)
+        guard case .error(let message) = controller.state else {
+            Issue.record("expected a no-speech notice, got \(controller.state)")
+            return
+        }
+        #expect(message.lowercased().contains("speech"))
+    }
+
     @Test func testCancelDiscardsRecording() {
         let provider = FakeProvider(
             name: "fake",

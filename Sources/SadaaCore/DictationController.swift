@@ -143,6 +143,15 @@ public final class DictationController {
             return
         }
 
+        // No speech in the whole recording: discard with a notice. Nothing is
+        // formatted, recorded, or delivered (an empty deliver would also wipe the
+        // clipboard). Spec section 5. The STT call was already billed by the API.
+        guard !transcript.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            try? store.prune(keep: recordingsToKeep)
+            state = .error("No speech detected.")
+            return
+        }
+
         // Raw transcript to the sidecar BEFORE formatting (never-lose).
         try? store.saveTranscript(transcript.text, for: audioURL)
 
