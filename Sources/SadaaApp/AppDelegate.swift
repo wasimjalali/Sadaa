@@ -5,8 +5,9 @@ import Carbon.HIToolbox
 import SadaaCore
 
 @MainActor
-final class AppDelegate: NSObject, NSApplicationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
+    private var formattingMenuItem: NSMenuItem?
     private let settings = AppSettings()
     private let hotkeys = HotkeyManager()
     private let hud = HUDPanel()
@@ -505,6 +506,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.setSubmenu(languageMenu, for: languageItem)
         menu.addItem(languageItem)
 
+        // Quick literal-dictation switch. When off, dictations are pure
+        // transcription with no GPT in the loop, so they can never take action.
+        let formattingItem = NSMenuItem(title: "Smart formatting",
+                                        action: #selector(toggleSmartFormatting),
+                                        keyEquivalent: "")
+        formattingItem.target = self
+        formattingItem.state = settings.formattingEnabled ? .on : .off
+        menu.addItem(formattingItem)
+        formattingMenuItem = formattingItem
+
         let settingsItem = NSMenuItem(title: "Settings…",
                                       action: #selector(openMainWindow),
                                       keyEquivalent: ",")
@@ -514,12 +525,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         menu.addItem(NSMenuItem(title: "Quit Sadaa",
                                 action: #selector(NSApplication.terminate(_:)),
                                 keyEquivalent: "q"))
+        menu.delegate = self
         item.menu = menu
         statusItem = item
     }
 
+    /// Keep the menu's checkmarks in sync with settings each time it opens, so a
+    /// change made on the Settings page is reflected here too.
+    func menuWillOpen(_ menu: NSMenu) {
+        formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
+    }
+
     @objc private func menuToggle() {
         controller?.toggle()
+    }
+
+    @objc private func toggleSmartFormatting() {
+        // Off = pure transcription, no GPT, so dictation can never take action.
+        // Takes effect on the next dictation (the formatter is built per use).
+        settings.formattingEnabled.toggle()
+        formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
     }
 
     @objc private func setLanguage(_ sender: NSMenuItem) {
