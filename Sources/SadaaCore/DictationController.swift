@@ -29,6 +29,7 @@ public final class DictationController {
     private let suggestTerms: ([String]) -> Void
     private let formatterFellBack: () -> Void
     private let now: () -> Date
+    private let isSecureInputActive: () -> Bool
     private var pendingRawMode = false
     private var processingTask: Task<Void, Never>?
     private var recordingStartedAt: Date?
@@ -47,7 +48,8 @@ public final class DictationController {
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
                 formatterFellBack: @escaping () -> Void = {},
-                now: @escaping () -> Date = { Date() }) {
+                now: @escaping () -> Date = { Date() },
+                isSecureInputActive: @escaping () -> Bool = { false }) {
         self.recorder = recorder
         self.providers = providers
         self.store = store
@@ -60,6 +62,7 @@ public final class DictationController {
         self.suggestTerms = suggestTerms
         self.formatterFellBack = formatterFellBack
         self.now = now
+        self.isSecureInputActive = isSecureInputActive
         self.recorder.onAutoStop = { [weak self] in
             DispatchQueue.main.async { self?.toggle() }
         }
@@ -93,6 +96,12 @@ public final class DictationController {
     }
 
     private func startRecording() {
+        // A password field is focused: refuse rather than record and paste into
+        // it. Spec section 5. IsSecureEventInputEnabled is injected from the app.
+        guard !isSecureInputActive() else {
+            state = .error("Secure field active. Dictation is off here.")
+            return
+        }
         let url = store.newRecordingURL()
         do {
             try recorder.start(to: url)

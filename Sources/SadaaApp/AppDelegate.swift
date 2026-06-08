@@ -1,6 +1,7 @@
 import AppKit
 import AVFoundation
 import ApplicationServices
+import Carbon.HIToolbox
 import SadaaCore
 
 @MainActor
@@ -133,7 +134,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             formatterFellBack: { [weak self] in
                 self?.hud.show(.error("Inserted raw text (formatter offline)."))
                 self?.hud.hide(after: 4)
-            }
+            },
+            isSecureInputActive: { IsSecureEventInputEnabled() }
         )
         controller.onStateChange = { [weak self] state in
             self?.render(state: state)

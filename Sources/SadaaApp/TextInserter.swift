@@ -1,5 +1,6 @@
 import AppKit
 import ApplicationServices
+import Carbon.HIToolbox
 
 enum DeliveryOutcome {
     case insertedViaAX   // typed into the focused element
@@ -12,6 +13,16 @@ enum DeliveryOutcome {
 struct TextInserter {
     @discardableResult
     func deliver(_ text: String) -> DeliveryOutcome {
+        // A secure field became active between record and delivery: never type or
+        // paste into a password box. Leave the text on the clipboard so the user
+        // can paste it somewhere safe themselves. Spec section 5.
+        if IsSecureEventInputEnabled() {
+            let pasteboard = NSPasteboard.general
+            pasteboard.clearContents()
+            pasteboard.setString(text, forType: .string)
+            return .clipboardOnly
+        }
+
         // 1. Clipboard, always (also the backup the user can re-paste).
         let pasteboard = NSPasteboard.general
         pasteboard.clearContents()

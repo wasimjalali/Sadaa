@@ -54,7 +54,8 @@ struct FakeProvider: TranscriptionProvider {
     }
 
     private func makeController(providers: [TranscriptionProvider],
-                                now: @escaping () -> Date = { Date() })
+                                now: @escaping () -> Date = { Date() },
+                                isSecureInputActive: @escaping () -> Bool = { false })
         -> DictationController {
         let controller = DictationController(
             recorder: recorder,
@@ -64,7 +65,8 @@ struct FakeProvider: TranscriptionProvider {
             recordingsToKeep: 10,
             deliver: { [weak self] text in self?.delivered.append(text) },
             record: { [weak self] record in self?.records.append(record) },
-            now: now
+            now: now,
+            isSecureInputActive: isSecureInputActive
         )
         controller.onStateChange = { [weak self] state in
             self?.states.append(state)
@@ -261,6 +263,25 @@ struct FakeProvider: TranscriptionProvider {
         controller.cancel()
         #expect(recorder.cancelled)
         #expect(controller.state == .idle)
+        #expect(delivered == [])
+    }
+
+    @Test func testSecureInputRefusesRecording() {
+        // Spec section 5: a password field is active -> refuse dictation with a
+        // clear message instead of recording and pasting into the secure field.
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "secret", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeController(providers: [provider],
+                                        isSecureInputActive: { true })
+        controller.toggle()
+        #expect(recorder.startedURL == nil)
+        guard case .error(let message) = controller.state else {
+            Issue.record("expected a secure-field refusal, got \(controller.state)")
+            return
+        }
+        #expect(message.lowercased().contains("secure"))
         #expect(delivered == [])
     }
 
