@@ -190,8 +190,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         self.voiceEditController = controller
     }
 
-    /// Reads the current selection from the focused element via Accessibility.
+    /// Reads the current selection: Accessibility first, then a Cmd-C fallback
+    /// for the apps where AX returns nothing (Terminal, VS Code, browsers).
     private static func readSelection() -> String? {
+        if let viaAX = readSelectionViaAX() { return viaAX }
+        return readSelectionViaCopy()
+    }
+
+    private static func readSelectionViaAX() -> String? {
         guard AXIsProcessTrusted() else { return nil }
         let systemWide = AXUIElementCreateSystemWide()
         var focusedRef: CFTypeRef?
@@ -205,6 +211,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 element, kAXSelectedTextAttribute as CFString, &selRef) == .success,
               let text = selRef as? String, !text.isEmpty else { return nil }
         return text
+    }
+
+    /// Copies the selection via a synthetic Cmd-C and reads it back, restoring
+    /// the user's clipboard afterwards. The brief bounded wait runs on the
+    /// user-initiated voice-edit start, not on any audio path.
+    private static func readSelectionViaCopy() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let pasteboard = NSPasteboard.general
+        let saved = Clipboard.snapshot(pasteboard)
+        let before = pasteboard.changeCount
+        guard let source = CGEventSource(stateID: .combinedSessionState),
+              let down = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: true),  // C
+              let up = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: false)
+        else { return nil }
+        down.flags = .maskCommand
+        up.flags = .maskCommand
+        down.post(tap: .cghidEventTap)
+        up.post(tap: .cghidEventTap)
+
+        var copied: String?
+        let deadline = Date().addingTimeInterval(0.2)
+        while Date() < deadline {
+            if pasteboard.changeCount != before {
+                copied = pasteboard.string(forType: .string)
+                break
+            }
+            usleep(10_000)   // 10ms
+        }
+        Clipboard.restore(saved, to: pasteboard)
+        let trimmed = copied?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return (trimmed?.isEmpty == false) ? copied : nil
     }
 
     /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
