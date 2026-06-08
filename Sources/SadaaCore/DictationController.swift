@@ -24,6 +24,11 @@ public final class DictationController {
     private let recordingsToKeep: Int
     private let deliver: (String) -> Void
     private let record: (DictationRecord) -> Void
+    private let format: ((String, FormattingContext) async throws -> FormattingResult)?
+    private let context: () -> FormattingContext
+    private let suggestTerms: ([String]) -> Void
+    private let formatterFellBack: () -> Void
+    private var pendingRawMode = false
     private var processingTask: Task<Void, Never>?
 
     public init(recorder: AudioRecording,
@@ -32,7 +37,14 @@ public final class DictationController {
                 hint: @escaping () -> TranscriptionHint,
                 recordingsToKeep: Int,
                 deliver: @escaping (String) -> Void,
-                record: @escaping (DictationRecord) -> Void = { _ in }) {
+                record: @escaping (DictationRecord) -> Void = { _ in },
+                format: ((String, FormattingContext) async throws -> FormattingResult)? = nil,
+                context: @escaping () -> FormattingContext = {
+                    FormattingContext(appBundleID: nil, dictionaryWords: [],
+                                      speakerContext: "", language: .auto)
+                },
+                suggestTerms: @escaping ([String]) -> Void = { _ in },
+                formatterFellBack: @escaping () -> Void = {}) {
         self.recorder = recorder
         self.providers = providers
         self.store = store
@@ -40,6 +52,10 @@ public final class DictationController {
         self.recordingsToKeep = recordingsToKeep
         self.deliver = deliver
         self.record = record
+        self.format = format
+        self.context = context
+        self.suggestTerms = suggestTerms
+        self.formatterFellBack = formatterFellBack
         self.recorder.onAutoStop = { [weak self] in
             DispatchQueue.main.async { self?.toggle() }
         }
@@ -47,11 +63,12 @@ public final class DictationController {
 
     /// Tap of the hotkey: start when idle, stop+process when recording.
     /// Ignored while a previous dictation is still processing.
-    public func toggle() {
+    public func toggle(rawMode: Bool = false) {
         switch state {
         case .idle, .error:
             startRecording()
         case .recording:
+            pendingRawMode = rawMode
             state = .transcribing   // synchronous: a racing toggle now sees .transcribing and is ignored
             processingTask = Task { await stopAndProcess() }
         case .transcribing, .delivering:
@@ -118,17 +135,30 @@ public final class DictationController {
             return
         }
 
+        // Raw transcript to the sidecar BEFORE formatting (never-lose).
         try? store.saveTranscript(transcript.text, for: audioURL)
 
+        var finalText = transcript.text
+        if !pendingRawMode, let format {
+            do {
+                let result = try await format(transcript.text, context())
+                finalText = result.text
+                if !result.newTerms.isEmpty { suggestTerms(result.newTerms) }
+            } catch {
+                formatterFellBack()   // keep raw finalText
+            }
+        }
+        pendingRawMode = false
+
         record(DictationRecord(
-            text: transcript.text,
+            text: finalText,
             createdAt: Date(),
             language: transcript.detectedLanguage,
             provider: usedProvider ?? "unknown",
             durationSeconds: transcript.durationSeconds))
 
         state = .delivering
-        deliver(transcript.text)
+        deliver(finalText)
         try? store.prune(keep: recordingsToKeep)
         state = .idle
     }

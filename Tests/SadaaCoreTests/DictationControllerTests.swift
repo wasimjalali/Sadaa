@@ -34,6 +34,8 @@ struct FakeProvider: TranscriptionProvider {
     private var delivered: [String] = []
     private var states: [DictationState] = []
     private var records: [DictationRecord] = []
+    private var suggested: [String] = []
+    private var fellBack = false
 
     init() throws {
         dir = FileManager.default.temporaryDirectory
@@ -43,6 +45,8 @@ struct FakeProvider: TranscriptionProvider {
         delivered = []
         states = []
         records = []
+        suggested = []
+        fellBack = false
     }
 
     deinit {
@@ -64,6 +68,73 @@ struct FakeProvider: TranscriptionProvider {
             self?.states.append(state)
         }
         return controller
+    }
+
+    private func makeFormattingController(
+        providers: [TranscriptionProvider],
+        format: @escaping (String, FormattingContext) async throws -> FormattingResult)
+        -> DictationController {
+        let controller = DictationController(
+            recorder: recorder,
+            providers: { providers },
+            store: store,
+            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
+            recordingsToKeep: 10,
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) },
+            format: format,
+            context: { FormattingContext(appBundleID: nil, dictionaryWords: [],
+                                         speakerContext: "", language: .auto) },
+            suggestTerms: { [weak self] terms in self?.suggested.append(contentsOf: terms) },
+            formatterFellBack: { [weak self] in self?.fellBack = true })
+        controller.onStateChange = { [weak self] state in self?.states.append(state) }
+        return controller
+    }
+
+    @Test func testFormatterAppliedAndTermsSuggested() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello world",
+                                        detectedLanguage: "english", durationSeconds: 1)))
+        let controller = makeFormattingController(providers: [provider]) { raw, _ in
+            #expect(raw == "hello world")
+            return FormattingResult(text: "Hello, world.", newTerms: ["Karko"])
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == ["Hello, world."])
+        #expect(records.first?.text == "Hello, world.")
+        #expect(suggested == ["Karko"])
+        let sidecar = recorder.startedURL!.deletingPathExtension()
+            .appendingPathExtension("txt")
+        #expect(try String(contentsOf: sidecar, encoding: .utf8) == "hello world")
+    }
+
+    @Test func testRawModeSkipsFormatter() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello world",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            Issue.record("formatter must not run in raw mode")
+            return FormattingResult(text: "WRONG", newTerms: [])
+        }
+        controller.toggle()                 // start
+        controller.toggle(rawMode: true)    // stop, raw
+        await controller.toggleAndWait()
+        #expect(delivered == ["hello world"])
+    }
+
+    @Test func testFormatterFailureFallsBackToRaw() async throws {
+        struct Boom: Error {}
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello world",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            throw Boom()
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == ["hello world"])
+        #expect(fellBack)
     }
 
     @Test func testHappyPath() async throws {
