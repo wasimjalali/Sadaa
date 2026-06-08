@@ -7,7 +7,7 @@ struct MicButton: View {
     let state: DictationState
     let onTap: () -> Void
 
-    private let diameter: CGFloat = 140
+    private let diameter: CGFloat = 96
 
     var body: some View {
         VStack(spacing: 14) {
@@ -45,15 +45,15 @@ struct MicButton: View {
         switch state {
         case .recording:
             Image(systemName: "stop.fill")
-                .font(.system(size: 44, weight: .medium))
+                .font(.system(size: 30, weight: .medium))
                 .foregroundStyle(.white)
         case .transcribing, .delivering:
             ProgressView()
-                .controlSize(.large)
+                .controlSize(.regular)
                 .tint(Theme.gold)
         case .idle, .error:
             Image(systemName: "mic.fill")
-                .font(.system(size: 50, weight: .medium))
+                .font(.system(size: 34, weight: .medium))
                 .foregroundStyle(.white)
         }
     }
@@ -76,7 +76,7 @@ struct MicButton: View {
                 .font(.caption)
                 .foregroundStyle(Theme.charcoal.opacity(0.7))
         case .idle, .error:
-            Text("Tap or press Right Option")
+            Text("Tap to start, or use your hotkey")
                 .font(.caption)
                 .foregroundStyle(Theme.charcoal.opacity(0.7))
         }

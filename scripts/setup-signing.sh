@@ -25,6 +25,10 @@ echo "Creating self-signed code-signing certificate '$IDENTITY'..."
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 
+# Use the system LibreSSL, not a Homebrew OpenSSL 3.x. OpenSSL 3 writes a PKCS12
+# MAC that macOS `security import` cannot verify ("MAC verification failed").
+OPENSSL=/usr/bin/openssl
+
 cat > "$TMP/cert.cnf" <<'EOF'
 [req]
 distinguished_name = dn
@@ -38,10 +42,10 @@ keyUsage = critical,digitalSignature
 extendedKeyUsage = critical,codeSigning
 EOF
 
-openssl req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
+"$OPENSSL" req -x509 -newkey rsa:2048 -sha256 -days 3650 -nodes \
     -keyout "$TMP/key.pem" -out "$TMP/cert.pem" -config "$TMP/cert.cnf" 2>/dev/null
 
-openssl pkcs12 -export -out "$TMP/cert.p12" \
+"$OPENSSL" pkcs12 -export -out "$TMP/cert.p12" \
     -inkey "$TMP/key.pem" -in "$TMP/cert.pem" -passout pass:sadaa 2>/dev/null
 
 # Import into the login keychain and allow codesign to use the key.

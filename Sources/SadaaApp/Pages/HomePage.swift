@@ -1,4 +1,5 @@
 import SwiftUI
+import AppKit
 import SadaaCore
 
 /// Shared formatters and label helpers for the windowed pages.
@@ -98,15 +99,22 @@ struct HomePage: View {
     }
 
     private func recentRow(_ record: DictationRecord) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
-            Text(record.text)
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.charcoal)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
-            Text(PageFormat.relativeTime(record.createdAt))
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.charcoal.opacity(0.5))
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text(record.text)
+                    .font(.system(size: 13))
+                    .foregroundStyle(Theme.charcoal)
+                    .lineLimit(2)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .textSelection(.enabled)
+                Text(PageFormat.relativeTime(record.createdAt))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.charcoal.opacity(0.5))
+            }
+            Button("Copy") { copy(record.text) }
+                .buttonStyle(.borderless)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.navy)
         }
         .padding(12)
         .background(
@@ -117,5 +125,10 @@ struct HomePage: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
         )
+    }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
     }
 }

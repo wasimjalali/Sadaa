@@ -8,6 +8,9 @@ final class HUDPanel {
     private var panel: NSPanel?
     private var hosting: NSHostingView<HUDView>?
     private var hideTimer: Timer?
+    /// Set once the badge has a position. After that we never recenter, so a
+    /// spot the user dragged it to is preserved across show() calls.
+    private var positioned = false
 
     func show(_ display: HUDDisplay) {
         hideTimer?.invalidate()
@@ -24,7 +27,9 @@ final class HUDPanel {
             panel.isOpaque = false
             panel.backgroundColor = .clear
             panel.hasShadow = true
-            panel.ignoresMouseEvents = true
+            // Draggable: accept mouse and let the user move it by its body.
+            panel.ignoresMouseEvents = false
+            panel.isMovableByWindowBackground = true
             panel.collectionBehavior = [.canJoinAllSpaces,
                                         .fullScreenAuxiliary]
             panel.contentView = hosting
@@ -35,12 +40,21 @@ final class HUDPanel {
         guard let panel, let hosting else { return }
         hosting.layout()
         let size = hosting.fittingSize
-        let screen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens[0]
-        let frame = screen.visibleFrame
-        panel.setFrame(NSRect(x: frame.midX - size.width / 2,
-                              y: frame.minY + 100,
-                              width: size.width, height: size.height),
-                       display: true)
+
+        if positioned {
+            // Keep where the user left it; just resize around the current origin.
+            if panel.frame.size != size {
+                panel.setContentSize(size)
+            }
+        } else {
+            let screen = NSApp.keyWindow?.screen ?? NSScreen.main ?? NSScreen.screens[0]
+            let frame = screen.visibleFrame
+            panel.setFrame(NSRect(x: frame.midX - size.width / 2,
+                                  y: frame.minY + 100,
+                                  width: size.width, height: size.height),
+                           display: true)
+            positioned = true
+        }
         panel.orderFrontRegardless()
     }
 
