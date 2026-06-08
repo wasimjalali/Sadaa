@@ -1,4 +1,6 @@
 import SwiftUI
+import AppKit
+import AVFoundation
 import SadaaCore
 
 /// The windowed settings: Azure credentials (ported from the old SettingsView),
@@ -22,6 +24,10 @@ struct SettingsPage: View {
     @State private var maiKey = ""
     @State private var transcriptionRate = ""
     @State private var formatterRate = ""
+    @State private var launchAtLogin = false
+    @State private var launchError = ""
+    @State private var micGranted = false
+    @State private var axTrusted = false
     @State private var saved = false
 
     var body: some View {
@@ -99,6 +105,25 @@ struct SettingsPage: View {
                         Text("Toggle dictation: Right Option")
                         Text("Cancel recording: Esc")
                     }
+
+                    Section("General") {
+                        Toggle("Launch Sadaa at login", isOn: $launchAtLogin)
+                        if !launchError.isEmpty {
+                            Text(launchError)
+                                .font(.caption)
+                                .foregroundStyle(.red)
+                        }
+                    }
+
+                    Section("Permissions") {
+                        permissionRow(
+                            title: "Microphone", granted: micGranted,
+                            pane: "Privacy_Microphone")
+                        permissionRow(
+                            title: "Accessibility (for the hotkey)", granted: axTrusted,
+                            pane: "Privacy_Accessibility")
+                        Button("Refresh") { refreshPermissions() }
+                    }
                 }
                 .formStyle(.grouped)
                 .scrollContentBackground(.hidden)
@@ -125,6 +150,33 @@ struct SettingsPage: View {
         )
     }
 
+    // MARK: - Permissions
+
+    private func permissionRow(title: String, granted: Bool, pane: String) -> some View {
+        HStack {
+            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
+                .foregroundStyle(granted ? Theme.sage : Theme.gold)
+            Text(title)
+            Spacer()
+            if !granted {
+                Button("Open Settings") { openPrivacyPane(pane) }
+                    .buttonStyle(.borderless)
+            }
+        }
+    }
+
+    private func openPrivacyPane(_ pane: String) {
+        if let url = URL(string:
+            "x-apple.systempreferences:com.apple.preference.security?\(pane)") {
+            NSWorkspace.shared.open(url)
+        }
+    }
+
+    private func refreshPermissions() {
+        micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
+        axTrusted = AXIsProcessTrusted()
+    }
+
     // MARK: - Azure load/save
 
     private func load() {
@@ -143,6 +195,8 @@ struct SettingsPage: View {
         maiKey = Keychain.get(account: "azure-speech-key") ?? ""
         transcriptionRate = String(settings.transcriptionRatePerMinute)
         formatterRate = String(settings.formatterRatePer1kChars)
+        launchAtLogin = LoginItem.isEnabled
+        refreshPermissions()
     }
 
     private func save() {
@@ -177,6 +231,14 @@ struct SettingsPage: View {
         }
         if let rate = Double(formatterRate.trimmingCharacters(in: .whitespaces)) {
             settings.formatterRatePer1kChars = rate
+        }
+
+        do {
+            try LoginItem.setEnabled(launchAtLogin)
+            launchError = ""
+        } catch {
+            launchError = "Couldn't update login item: \(error.localizedDescription)"
+            launchAtLogin = LoginItem.isEnabled
         }
 
         viewModel.refreshConfig()
