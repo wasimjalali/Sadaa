@@ -104,6 +104,7 @@ struct SettingsPage: View {
                     Section("Hotkey") {
                         Text("Toggle dictation: Right Option")
                         Text("Cancel recording: Esc")
+                        Text("Voice edit selection: Control + Option + E")
                     }
 
                     Section("General") {

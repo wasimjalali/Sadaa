@@ -8,9 +8,12 @@ import SadaaCore
 final class HotkeyManager {
     private static let rightOptionKeycode: Int64 = 61
     private static let escapeKeycode: Int64 = 53
+    private static let eKeycode: Int64 = 14
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
+    /// Ctrl+Option+E: voice-edit the current selection. Spec section 8.
+    var onVoiceEdit: (() -> Void)?
     /// The app layer tells us whether a recording is active so we know
     /// when Esc belongs to us.
     var isRecordingActive: (() -> Bool) = { false }
@@ -88,6 +91,11 @@ final class HotkeyManager {
                 DispatchQueue.main.async { [weak self] in self?.onCancel?() }
                 return nil // consume Esc so the frontmost app never sees it
             }
+        case .keyDown where keycode == Self.eKeycode
+            && event.flags.contains(.maskControl)
+            && event.flags.contains(.maskAlternate):
+            DispatchQueue.main.async { [weak self] in self?.onVoiceEdit?() }
+            return nil // consume Ctrl+Option+E so the target app never sees it
         case .keyDown:
             _ = recognizer.handle(.otherKeyDown)
         default:

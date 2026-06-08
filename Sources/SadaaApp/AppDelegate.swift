@@ -1,5 +1,6 @@
 import AppKit
 import AVFoundation
+import ApplicationServices
 import SadaaCore
 
 @MainActor
@@ -16,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var snippets: SnippetStore?
     private var notes: NotesStore?
     private var controller: DictationController?
+    private var voiceEditController: VoiceEditController?
     private var recordingTimer: Timer?
     private var recordingSeconds = 0
     private var currentLevel: Float = 0
@@ -132,6 +134,58 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             self?.viewModel?.refreshState(state)
         }
         self.controller = controller
+
+        setUpVoiceEdit(store: store, dictionary: dictionary, snippets: snippets)
+    }
+
+    /// Voice edit gets its own recorder so it never fights the dictation flow.
+    /// Only wired when a GPT formatter is configured (it does the rewrite).
+    private func setUpVoiceEdit(store: RecordingStore,
+                                dictionary: DictionaryStore,
+                                snippets: SnippetStore) {
+        guard let formatter = Self.buildFormatter(settings: settings) else { return }
+        let recorder = AudioRecorder(silenceTimeout: settings.silenceTimeout)
+        let controller = VoiceEditController(
+            recorder: recorder,
+            providers: { [settings] in Self.buildProviders(settings: settings) },
+            store: store,
+            hint: { [settings, dictionary] in
+                TranscriptionHint(languagePin: settings.languagePin,
+                                  dictionaryWords: dictionary.biasList(budget: 50))
+            },
+            readSelection: { Self.readSelection() },
+            rewrite: { [settings, dictionary, snippets] selection, instruction in
+                let context = FormattingContext(
+                    appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+                    dictionaryWords: dictionary.biasList(budget: 50),
+                    speakerContext: settings.speakerContext,
+                    language: settings.languagePin,
+                    snippets: snippets.all())
+                return try await formatter.rewrite(selection: selection,
+                                                   instruction: instruction,
+                                                   context: context)
+            },
+            replace: { [weak self] edited in _ = self?.inserter.deliver(edited) })
+        controller.onStateChange = { [weak self] state in
+            self?.renderVoiceEdit(state)
+        }
+        self.voiceEditController = controller
+    }
+
+    /// Reads the current selection from the focused element via Accessibility.
+    private static func readSelection() -> String? {
+        guard AXIsProcessTrusted() else { return nil }
+        let systemWide = AXUIElementCreateSystemWide()
+        var focusedRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
+              let focusedRef else { return nil }
+        let element = focusedRef as! AXUIElement
+        var selRef: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(
+                element, kAXSelectedTextAttribute as CFString, &selRef) == .success,
+              let text = selRef as? String, !text.isEmpty else { return nil }
+        return text
     }
 
     /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
@@ -190,7 +244,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
             let raw = NSEvent.modifierFlags.contains(.shift)
             self?.controller?.toggle(rawMode: raw)
         }
-        hotkeys.onCancel = { [weak self] in self?.controller?.cancel() }
+        hotkeys.onCancel = { [weak self] in
+            self?.controller?.cancel()
+            self?.voiceEditController?.cancel()
+        }
+        hotkeys.onVoiceEdit = { [weak self] in
+            guard let self else { return }
+            if let voiceEdit = self.voiceEditController {
+                voiceEdit.toggle()
+            } else {
+                self.hud.show(.error("Set a GPT deployment in Settings to use voice edit."))
+                self.hud.hide(after: 5)
+            }
+        }
         hotkeys.isRecordingActive = { [weak self] in
             self?.recordingActive ?? false
         }
@@ -248,6 +314,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         case .error(let message):
             recordingActive = false
             stopRecordingTimer()
+            setIcon("waveform", tint: nil)
+            hud.show(.error(message))
+            hud.hide(after: 6)
+        }
+    }
+
+    private func renderVoiceEdit(_ state: VoiceEditState) {
+        switch state {
+        case .idle:
+            recordingActive = false
+            setIcon("waveform", tint: nil)
+            hud.hide(after: 0.4)
+        case .recording:
+            recordingActive = true   // let Esc cancel the voice edit too
+            setIcon("pencil", tint: .systemRed)
+            hud.show(.recording(seconds: 0, level: 0))
+        case .rewriting:
+            recordingActive = false
+            setIcon("waveform", tint: .systemOrange)
+            hud.show(.transcribing)
+        case .error(let message):
+            recordingActive = false
             setIcon("waveform", tint: nil)
             hud.show(.error(message))
             hud.hide(after: 6)
