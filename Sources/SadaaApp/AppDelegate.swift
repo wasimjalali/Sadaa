@@ -324,8 +324,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func startHotkeys() {
         hotkeys.activationKeycode = Int64(settings.hotkeyKeycode)
+        hotkeys.voiceEditKeycode = Int64(settings.voiceEditKeycode)
         viewModel?.onHotkeyKeycodeChange = { [weak self] code in
             self?.hotkeys.activationKeycode = Int64(code)
+        }
+        viewModel?.onVoiceEditKeycodeChange = { [weak self] code in
+            self?.hotkeys.voiceEditKeycode = Int64(code)
         }
         hotkeys.onToggle = { [weak self] in
             guard let self else { return }

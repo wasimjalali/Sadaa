@@ -194,12 +194,25 @@ struct SettingsPage: View {
     }
 
     private var hotkeyCard: some View {
-        card("Hotkey") {
+        card("Hotkeys") {
             VStack(alignment: .leading, spacing: 5) {
-                Text("Activation key (tap to start and stop dictation)")
+                Text("Dictation key (tap to start and stop dictation)")
                     .font(.system(size: 12, weight: .medium))
                     .foregroundStyle(Theme.charcoal.opacity(0.85))
                 Picker("", selection: hotkeyBinding) {
+                    ForEach(HotkeyOption.all) { option in
+                        Text(option.label).tag(option.keycode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: 240, alignment: .leading)
+            }
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Voice-edit key (tap to rewrite the selected text by voice)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+                Picker("", selection: voiceEditBinding) {
                     ForEach(HotkeyOption.all) { option in
                         Text(option.label).tag(option.keycode)
                     }
@@ -213,12 +226,12 @@ struct SettingsPage: View {
                       ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
                     .foregroundStyle(viewModel.hotkeyActive ? Theme.sage : Theme.gold)
                 Text(viewModel.hotkeyActive
-                     ? "Hotkey is active."
-                     : "Hotkey is not active. Grant Accessibility below.")
+                     ? "Hotkeys are active."
+                     : "Hotkeys are not active. Grant Accessibility below.")
                     .font(.caption)
                     .foregroundStyle(Theme.charcoal.opacity(0.7))
             }
-            hint("Cancel a recording with Esc. Voice-edit a selection by tapping \(viewModel.hotkeyKeycode == 61 ? "Right Command" : "Right Option").")
+            hint("Pick two different keys. To voice-edit: select some text, tap \(HotkeyOption.label(for: viewModel.voiceEditKeycode)), speak your instruction (\"make it formal\", \"fix the grammar\"), then tap the key again. Cancel any recording with Esc.")
         }
     }
 
@@ -260,6 +273,13 @@ struct SettingsPage: View {
         Binding(
             get: { viewModel.hotkeyKeycode },
             set: { viewModel.setHotkeyKeycode($0) }
+        )
+    }
+
+    private var voiceEditBinding: Binding<Int> {
+        Binding(
+            get: { viewModel.voiceEditKeycode },
+            set: { viewModel.setVoiceEditKeycode($0) }
         )
     }
 

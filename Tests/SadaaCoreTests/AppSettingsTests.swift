@@ -20,6 +20,8 @@ import Foundation
         #expect(settings.recordingsToKeep == 10)
         #expect(settings.azureEndpoint == "")
         #expect(settings.azureDeployment == "")
+        #expect(settings.hotkeyKeycode == 54)      // Right Command
+        #expect(settings.voiceEditKeycode == 61)   // Right Option
     }
 
     @Test func testRoundTrip() {
@@ -28,10 +30,14 @@ import Foundation
         settings.languagePin = .de
         settings.silenceTimeout = 45.5
         settings.recordingsToKeep = 5
+        settings.hotkeyKeycode = 61
+        settings.voiceEditKeycode = 54
         #expect(settings.azureEndpoint == "https://myres.openai.azure.com")
         #expect(settings.azureDeployment == "whisper")
         #expect(settings.languagePin == .de)
         #expect(settings.silenceTimeout == 45.5)
         #expect(settings.recordingsToKeep == 5)
+        #expect(settings.hotkeyKeycode == 61)
+        #expect(settings.voiceEditKeycode == 54)
     }
 }

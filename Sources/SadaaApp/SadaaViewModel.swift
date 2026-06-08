@@ -17,11 +17,14 @@ final class SadaaViewModel: ObservableObject {
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
     @Published var hotkeyKeycode: Int = 54
+    @Published var voiceEditKeycode: Int = 61
     /// A failed dictation whose audio is retained and can be retried.
     @Published var canRetry: Bool = false
 
     /// Set by the app layer to push a new activation key to the live HotkeyManager.
     var onHotkeyKeycodeChange: ((Int) -> Void)?
+    /// Set by the app layer to push a new voice-edit key to the live HotkeyManager.
+    var onVoiceEditKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to retry the last failed dictation on its audio.
     var onRetry: (() -> Void)?
 
@@ -71,12 +74,36 @@ final class SadaaViewModel: ObservableObject {
             (Keychain.get(account: "azure-openai-key")?.isEmpty == false)
         languagePin = settings.languagePin
         hotkeyKeycode = settings.hotkeyKeycode
+        voiceEditKeycode = settings.voiceEditKeycode
     }
 
+    /// Sets the dictation key. If it would collide with the voice-edit key, the
+    /// voice-edit key takes over this key's previous value (a swap), so the two
+    /// are always distinct.
     func setHotkeyKeycode(_ code: Int) {
+        if code == voiceEditKeycode {
+            let freed = hotkeyKeycode
+            settings.voiceEditKeycode = freed
+            voiceEditKeycode = freed
+            onVoiceEditKeycodeChange?(freed)
+        }
         settings.hotkeyKeycode = code
         hotkeyKeycode = code
         onHotkeyKeycodeChange?(code)
+    }
+
+    /// Sets the voice-edit key, swapping the dictation key out of the way if the
+    /// two would collide.
+    func setVoiceEditKeycode(_ code: Int) {
+        if code == hotkeyKeycode {
+            let freed = voiceEditKeycode
+            settings.hotkeyKeycode = freed
+            hotkeyKeycode = freed
+            onHotkeyKeycodeChange?(freed)
+        }
+        settings.voiceEditKeycode = code
+        voiceEditKeycode = code
+        onVoiceEditKeycodeChange?(code)
     }
 
     // MARK: - Dictionary

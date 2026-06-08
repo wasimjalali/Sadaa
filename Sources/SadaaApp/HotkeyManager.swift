@@ -34,13 +34,14 @@ final class HotkeyManager {
     /// Updatable live: the tap listens to all flagsChanged and filters here, so
     /// changing this takes effect without restarting the tap.
     var activationKeycode: Int64 = 54
-    /// Voice-edit uses the OTHER of the two right-side tap keys, so it never
-    /// collides with the dictation key: Right Command <-> Right Option.
-    var voiceEditKeycode: Int64 { activationKeycode == 61 ? 54 : 61 }
+    /// The modifier key whose tap triggers voice-edit. Default Right Option (61).
+    /// Stored (not derived) so the user can pick it independently in Settings;
+    /// the Settings layer guarantees it never equals activationKeycode.
+    var voiceEditKeycode: Int64 = 61
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
-    /// Right Command tap: voice-edit the current selection. Spec section 8.
+    /// Voice-edit key tap: voice-edit the current selection. Spec section 8.
     var onVoiceEdit: (() -> Void)?
 
     /// The flag a given modifier keycode sets while held, used to read down/up.

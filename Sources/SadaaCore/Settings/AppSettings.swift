@@ -14,6 +14,7 @@ public final class AppSettings {
         static let silenceTimeout = "silenceTimeout"
         static let recordingsToKeep = "recordingsToKeep"
         static let hotkeyKeycode = "hotkeyKeycode"
+        static let voiceEditKeycode = "voiceEditKeycode"
         static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
         static let speakerContext = "speakerContext"
@@ -72,6 +73,13 @@ public final class AppSettings {
     public var hotkeyKeycode: Int {
         get { defaults.object(forKey: Keys.hotkeyKeycode) as? Int ?? 54 }
         set { defaults.set(newValue, forKey: Keys.hotkeyKeycode) }
+    }
+
+    /// Virtual keycode of the voice-edit modifier key. Default 61 = Right Option.
+    /// Independent from the dictation key; the UI keeps the two distinct.
+    public var voiceEditKeycode: Int {
+        get { defaults.object(forKey: Keys.voiceEditKeycode) as? Int ?? 61 }
+        set { defaults.set(newValue, forKey: Keys.voiceEditKeycode) }
     }
 
     /// Azure GPT deployment used for smart formatting. Spec section 3.6.
