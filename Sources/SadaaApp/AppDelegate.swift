@@ -461,6 +461,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         settings.languagePin = pin
         sender.menu?.items.forEach { $0.state = .off }
         sender.state = .on
+        viewModel?.refreshConfig()   // keep Home + Settings in sync with the menu
     }
 
     @objc private func openMainWindow() {

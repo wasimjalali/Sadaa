@@ -75,7 +75,12 @@ struct MicButton: View {
             Text("Inserting")
                 .font(.caption)
                 .foregroundStyle(Theme.charcoal.opacity(0.7))
-        case .idle, .error:
+        case .error(let message):
+            Text(message)
+                .font(.caption)
+                .multilineTextAlignment(.center)
+                .foregroundStyle(Color.red.opacity(0.85))
+        case .idle:
             Text("Tap to start, or use your hotkey")
                 .font(.caption)
                 .foregroundStyle(Theme.charcoal.opacity(0.7))
