@@ -9,10 +9,17 @@ import AppKit
 /// out and are dropped on restore; the common types (text, RTF, images, URLs)
 /// round-trip fine.
 enum Clipboard {
+    /// Marks pasteboard items Sadaa itself wrote during delivery. snapshot()
+    /// skips them: deep-copying one would force its lazy PasteSentinel promise
+    /// (faking a consumed paste) and capture our own dictation as "the user's
+    /// clipboard".
+    static let deliveryMarker = NSPasteboard.PasteboardType("ai.karko.sadaa.delivery")
+
     /// Deep-copy the current items so they survive a `clearContents()`.
     static func snapshot(_ pasteboard: NSPasteboard = .general) -> [NSPasteboardItem] {
         guard let items = pasteboard.pasteboardItems else { return [] }
-        return items.map { item in
+        return items.compactMap { item in
+            guard !item.types.contains(deliveryMarker) else { return nil }
             let copy = NSPasteboardItem()
             for type in item.types {
                 if let data = item.data(forType: type) {

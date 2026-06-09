@@ -26,6 +26,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recordingSeconds = 0
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
+    /// A fallback notice (formatter offline, optimizer failed) to surface once
+    /// the dictation lands. Shown from render(.idle): showing it earlier is
+    /// useless because the delivering/idle transitions repaint the HUD within
+    /// milliseconds and the message is never seen.
+    private var pendingDeliveryNotice: String?
+    /// Previous dictation state, so the stop chime only plays when a recording
+    /// actually ended (retryLast jumps straight to .transcribing).
+    private var lastDictationState: DictationState = .idle
 
     /// A dictation is mid-flight (recording or processing).
     private var isDictationBusy: Bool {
@@ -42,7 +50,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
+    /// Every way to start a dictation funnels through here, so the voice-edit
+    /// mutex holds for the hotkey, the menu item, the mic button AND retry.
+    /// Two live recorders would fight over the mic, the shared recording timer
+    /// and the status icon.
+    private func toggleDictation(rawMode: Bool = false) {
+        guard !isVoiceEditBusy else {
+            hud.show(.error("Finish the voice edit first."))
+            hud.hide(after: 3)
+            return
+        }
+        controller?.toggle(rawMode: rawMode)
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
+        installMainMenu()
         chimes.isEnabled = { [settings] in settings.soundEffectsEnabled }
         setUpStatusItem()
         setUpController()
@@ -57,6 +79,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                        hasVisibleWindows flag: Bool) -> Bool {
         openMainWindow()
         return true
+    }
+
+    /// Sadaa is an accessory app, so no menu bar is visible, but AppKit still
+    /// routes key equivalents through NSApp.mainMenu. Without an Edit menu,
+    /// Cmd-V (the user's or TextInserter's synthetic one) dies inside Sadaa's
+    /// own windows, so dictating into the Notes page lost the text.
+    private func installMainMenu() {
+        let mainMenu = NSMenu()
+
+        let appItem = NSMenuItem()
+        let appMenu = NSMenu()
+        appMenu.addItem(withTitle: "Quit Sadaa",
+                        action: #selector(NSApplication.terminate(_:)),
+                        keyEquivalent: "q")
+        appItem.submenu = appMenu
+        mainMenu.addItem(appItem)
+
+        let editItem = NSMenuItem()
+        let editMenu = NSMenu(title: "Edit")
+        editMenu.addItem(withTitle: "Undo",
+                         action: Selector(("undo:")), keyEquivalent: "z")
+        editMenu.addItem(withTitle: "Redo",
+                         action: Selector(("redo:")), keyEquivalent: "Z")
+        editMenu.addItem(.separator())
+        editMenu.addItem(withTitle: "Cut",
+                         action: #selector(NSText.cut(_:)), keyEquivalent: "x")
+        editMenu.addItem(withTitle: "Copy",
+                         action: #selector(NSText.copy(_:)), keyEquivalent: "c")
+        editMenu.addItem(withTitle: "Paste",
+                         action: #selector(NSText.paste(_:)), keyEquivalent: "v")
+        editMenu.addItem(withTitle: "Select All",
+                         action: #selector(NSText.selectAll(_:)), keyEquivalent: "a")
+        editItem.submenu = editMenu
+        mainMenu.addItem(editItem)
+
+        NSApp.mainMenu = mainMenu
     }
 
     // MARK: - Wiring
@@ -98,7 +156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             dictionary: dictionary,
             snippets: snippets,
             notes: notes,
-            onToggle: { [weak self] in self?.controller?.toggle() })
+            onToggle: { [weak self] in self?.toggleDictation() })
         self.viewModel = viewModel
 
         let controller = DictationController(
@@ -111,10 +169,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             recordingsToKeep: settings.recordingsToKeep,
             deliver: { [weak self] text in
-                let outcome = self?.inserter.deliver(text)
-                if outcome == .clipboardOnly {
-                    self?.hud.show(.error("Copied. Press Cmd-V to paste."))
-                    self?.hud.hide(after: 4)
+                self?.inserter.deliver(text) { outcome in
+                    if outcome == .clipboardOnly {
+                        self?.hud.show(.error("Copied. Press Cmd-V to paste."))
+                        self?.hud.hide(after: 4)
+                    }
                 }
             },
             record: { [weak self] record in
@@ -152,11 +211,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     let pack = ModelPackLibrary.pack(
                         for: target, overridesDirectory: Self.modelPacksDirectory())
                     await MainActor.run { self?.hud.show(.optimizing(target: target.displayName)) }
-                    return try await formatter.optimize(
-                        rawTranscript: raw, context: ctx, pack: pack)
+                    do {
+                        return try await formatter.optimize(
+                            rawTranscript: raw, context: ctx, pack: pack)
+                    } catch {
+                        // Optimizer failure means raw text, with its own notice:
+                        // "formatter offline" here would misdirect any debugging.
+                        await MainActor.run {
+                            self?.pendingDeliveryNotice =
+                                "Inserted raw text (prompt optimizer failed)."
+                        }
+                        return FormattingResult(text: raw, newTerms: [], mode: .raw)
+                    }
                 }
                 guard let formatter = Self.buildFormatter(settings: settings) else {
-                    return FormattingResult(text: raw, newTerms: [])
+                    return FormattingResult(text: raw, newTerms: [], mode: .raw)
                 }
                 return try await formatter.format(rawTranscript: raw, context: ctx)
             },
@@ -173,8 +242,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.viewModel?.refreshDictionary()
             },
             formatterFellBack: { [weak self] in
-                self?.hud.show(.error("Inserted raw text (formatter offline)."))
-                self?.hud.hide(after: 4)
+                self?.pendingDeliveryNotice = "Inserted raw text (formatter offline)."
             },
             servedByFallback: { [weak self] name in
                 self?.hud.show(.error("Used \(name). Your primary provider was unavailable."))
@@ -187,7 +255,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.viewModel?.refreshState(state)
             self?.viewModel?.canRetry = self?.controller?.canRetry ?? false
         }
-        viewModel.onRetry = { [weak self] in self?.controller?.retryLast() }
+        viewModel.onRetry = { [weak self] in
+            guard let self else { return }
+            // Same mutex as starting a dictation: retry transcribes and delivers.
+            guard !self.isVoiceEditBusy else {
+                self.hud.show(.error("Finish the voice edit first."))
+                self.hud.hide(after: 3)
+                return
+            }
+            self.controller?.retryLast()
+        }
         self.controller = controller
 
         // Voice edit gets its own recordings folder so its retention never
@@ -233,7 +310,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                                    instruction: instruction,
                                                    context: context)
             },
-            replace: { [weak self] edited in _ = self?.inserter.deliver(edited) })
+            replace: { [weak self] edited in
+                self?.inserter.deliver(edited) { outcome in
+                    if outcome == .clipboardOnly {
+                        self?.hud.show(.error("Copied. Press Cmd-V to paste."))
+                        self?.hud.hide(after: 4)
+                    }
+                }
+            })
         controller.onStateChange = { [weak self] state in
             self?.renderVoiceEdit(state)
         }
@@ -410,14 +494,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         hotkeys.onToggle = { [weak self] in
             guard let self else { return }
-            // Don't start a dictation while a voice edit is mid-flight.
-            guard !self.isVoiceEditBusy else {
-                self.hud.show(.error("Finish the voice edit first."))
-                self.hud.hide(after: 3)
-                return
-            }
-            let raw = NSEvent.modifierFlags.contains(.shift)
-            self.controller?.toggle(rawMode: raw)
+            self.toggleDictation(rawMode: NSEvent.modifierFlags.contains(.shift))
         }
         hotkeys.onCancel = { [weak self] in
             // Route Esc to whichever flow is actually recording.
@@ -488,17 +565,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // MARK: - State rendering
 
     private func render(state: DictationState) {
+        defer { lastDictationState = state }
         switch state {
         case .idle:
             stopRecordingTimer()
             setIcon("waveform", tint: nil)
-            hud.hide(after: 0.4)
+            if let notice = pendingDeliveryNotice {
+                pendingDeliveryNotice = nil
+                hud.show(.error(notice))
+                hud.hide(after: 4)
+            } else {
+                hud.hide(after: 0.4)
+            }
         case .recording:
             chimes.playStart()
             startRecordingTimer()
             setIcon("record.circle.fill", tint: .systemRed)
         case .transcribing:
-            chimes.playStop()
+            if lastDictationState == .recording { chimes.playStop() }
             stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
@@ -646,7 +730,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func menuToggle() {
-        controller?.toggle()
+        toggleDictation()
     }
 
     @objc private func toggleSmartFormatting() {
