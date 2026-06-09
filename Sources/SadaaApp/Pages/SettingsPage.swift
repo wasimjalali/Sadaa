@@ -74,11 +74,23 @@ struct SettingsPage: View {
     // MARK: - Reusable building blocks
 
     private func card<Content: View>(_ title: String,
+                                     icon: String? = nil,
                                      @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 14) {
-            Text(title)
-                .font(.system(size: 15, weight: .semibold))
-                .foregroundStyle(Theme.charcoal)
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 8) {
+                if let icon {
+                    Image(systemName: icon)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.gold)
+                }
+                Text(title)
+                    .font(.system(size: 16, weight: .bold))
+                    .foregroundStyle(Theme.navy)
+            }
+            Rectangle()
+                .fill(Theme.gold.opacity(0.22))
+                .frame(height: 1)
+                .padding(.bottom, 2)
             content()
         }
         .padding(18)
@@ -116,10 +128,58 @@ struct SettingsPage: View {
             .fixedSize(horizontal: false, vertical: true)
     }
 
+    /// Small colored status pill. Sage means good, gold means needs attention.
+    private func statusCapsule(_ text: String, good: Bool) -> some View {
+        let tint = good ? Theme.sage : Theme.gold
+        return HStack(spacing: 6) {
+            Circle()
+                .fill(tint)
+                .frame(width: 7, height: 7)
+            Text(text)
+                .font(.caption)
+                .foregroundStyle(Theme.charcoal.opacity(0.75))
+        }
+        .padding(.horizontal, 9)
+        .padding(.vertical, 5)
+        .background(
+            Capsule().fill(tint.opacity(0.12))
+        )
+        .overlay(
+            Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    /// A labelled control row (picker or toggle) that picks up a soft cream
+    /// highlight on hover, so the interactive area reads as a single unit.
+    private func controlRow<Content: View>(_ label: String,
+                                           @ViewBuilder _ content: () -> Content) -> some View {
+        HoverHighlightRow(
+            VStack(alignment: .leading, spacing: 5) {
+                Text(label)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+                content()
+            }
+        )
+    }
+
+    /// Transient "Saved" confirmation shown next to a save button. Fades in and
+    /// out and only appears when `visible`, so callers gate it on no validation
+    /// error having fired.
+    private func savedBadge(_ visible: Bool) -> some View {
+        Label("Saved", systemImage: "checkmark.circle.fill")
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(Theme.sage)
+            .symbolEffect(.bounce, value: visible)
+            .opacity(visible ? 1 : 0)
+            .scaleEffect(visible ? 1 : 0.92)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: visible)
+    }
+
     // MARK: - Cards
 
     private var azureCard: some View {
-        card("Azure OpenAI / Foundry") {
+        card("Azure OpenAI / Foundry", icon: "cloud") {
             field("Endpoint", "https://your-resource.services.ai.azure.com", $endpoint)
             field("Transcription deployment", "gpt-4o-mini-transcribe", $deployment)
             field("API version", "2025-03-01-preview", $apiVersion)
@@ -130,17 +190,13 @@ struct SettingsPage: View {
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.navy)
                     .keyboardShortcut(.defaultAction)
-                if saved {
-                    Label("Saved", systemImage: "checkmark.circle.fill")
-                        .font(.caption)
-                        .foregroundStyle(Theme.sage)
-                }
+                savedBadge(saved && rateError.isEmpty)
             }
         }
     }
 
     private var formattingCard: some View {
-        card("Smart formatting") {
+        card("Smart formatting", icon: "wand.and.stars") {
             Toggle("Format dictations with GPT", isOn: $formattingEnabled)
                 .tint(Theme.navy)
             field("GPT deployment", "gpt-4o-mini", $gptDeployment)
@@ -162,7 +218,7 @@ struct SettingsPage: View {
     }
 
     private var promptModeCard: some View {
-        card("Prompt mode") {
+        card("Prompt mode", icon: "wand.and.stars") {
             Toggle("Optimize dictations into prompts in coding apps", isOn: $promptModeEnabled)
                 .tint(Theme.navy)
             VStack(alignment: .leading, spacing: 5) {
@@ -195,7 +251,7 @@ struct SettingsPage: View {
             field("Prompt deployment", "gpt-4o", $promptModeDeployment)
             hint("Leave empty to use the formatting deployment.")
             Button("Open packs folder") { openPacksFolder() }
-                .buttonStyle(.bordered)
+                .buttonStyle(SettingsBorderedButtonStyle())
             if !packsError.isEmpty {
                 Text(packsError).font(.caption).foregroundStyle(.red)
             }
@@ -219,7 +275,7 @@ struct SettingsPage: View {
     }
 
     private var fallbackCard: some View {
-        card("Fallback providers (optional)") {
+        card("Fallback providers (optional)", icon: "arrow.triangle.branch") {
             Toggle("Use OpenAI if Azure fails", isOn: $openaiEnabled)
                 .tint(Theme.navy)
             field("OpenAI model", "whisper-1", $openaiModel)
@@ -238,11 +294,8 @@ struct SettingsPage: View {
     }
 
     private var languageCard: some View {
-        card("Language") {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Dictation language")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+        card("Language", icon: "globe") {
+            controlRow("Dictation language") {
                 Picker("", selection: languageBinding) {
                     ForEach(LanguagePin.allCases, id: \.self) { pin in
                         Text(PageFormat.languageLabel(pin)).tag(pin)
@@ -256,7 +309,7 @@ struct SettingsPage: View {
     }
 
     private var costCard: some View {
-        card("Usage and cost") {
+        card("Usage and cost", icon: "chart.bar") {
             hint("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
             field("Transcription rate ($/min)", "0.006", $transcriptionRate)
             field("Formatter rate ($/1k chars)", "0.002", $formatterRate)
@@ -267,11 +320,8 @@ struct SettingsPage: View {
     }
 
     private var hotkeyCard: some View {
-        card("Hotkeys") {
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Dictation key (tap to start and stop dictation)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+        card("Hotkeys", icon: "keyboard") {
+            controlRow("Dictation key (tap to start and stop dictation)") {
                 Picker("", selection: hotkeyBinding) {
                     ForEach(HotkeyOption.all) { option in
                         Text(option.label).tag(option.keycode)
@@ -281,10 +331,7 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(maxWidth: 240, alignment: .leading)
             }
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Voice-edit key (tap to rewrite the selected text by voice)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+            controlRow("Voice-edit key (tap to rewrite the selected text by voice)") {
                 Picker("", selection: voiceEditBinding) {
                     ForEach(HotkeyOption.all) { option in
                         Text(option.label).tag(option.keycode)
@@ -294,22 +341,16 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(maxWidth: 240, alignment: .leading)
             }
-            HStack(spacing: 6) {
-                Image(systemName: viewModel.hotkeyActive
-                      ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
-                    .foregroundStyle(viewModel.hotkeyActive ? Theme.sage : Theme.gold)
-                Text(viewModel.hotkeyActive
-                     ? "Hotkeys are active."
-                     : "Hotkeys are not active. Grant Accessibility below.")
-                    .font(.caption)
-                    .foregroundStyle(Theme.charcoal.opacity(0.7))
-            }
+            statusCapsule(viewModel.hotkeyActive
+                          ? "Hotkeys are active."
+                          : "Hotkeys are not active. Grant Accessibility below.",
+                          good: viewModel.hotkeyActive)
             hint("Pick two different keys. To voice-edit: select some text, tap \(HotkeyOption.label(for: viewModel.voiceEditKeycode)), speak your instruction (\"make it formal\", \"fix the grammar\"), then tap the key again. Cancel any recording with Esc.")
         }
     }
 
     private var generalCard: some View {
-        card("General") {
+        card("General", icon: "gearshape") {
             Toggle("Launch Sadaa at login", isOn: $launchAtLogin)
                 .tint(Theme.navy)
             if !launchError.isEmpty {
@@ -317,13 +358,16 @@ struct SettingsPage: View {
             }
             Toggle("Play a soft chime when dictation starts and stops", isOn: $soundEffects)
                 .tint(Theme.navy)
-            Button("Apply") { save() }
-                .buttonStyle(.bordered)
+            HStack(spacing: 10) {
+                Button("Apply") { save() }
+                    .buttonStyle(SettingsBorderedButtonStyle())
+                savedBadge(saved && launchError.isEmpty && rateError.isEmpty)
+            }
         }
     }
 
     private var permissionsCard: some View {
-        card("Permissions") {
+        card("Permissions", icon: "lock.shield") {
             permissionRow(title: "Microphone", granted: micGranted,
                           pane: "Privacy_Microphone")
             permissionRow(title: "Accessibility (for the hotkey)", granted: axTrusted,
@@ -361,14 +405,13 @@ struct SettingsPage: View {
     // MARK: - Permissions
 
     private func permissionRow(title: String, granted: Bool, pane: String) -> some View {
-        HStack {
-            Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
-                .foregroundStyle(granted ? Theme.sage : Theme.gold)
+        HStack(spacing: 10) {
             Text(title).foregroundStyle(Theme.charcoal)
+            statusCapsule(granted ? "Granted" : "Needed", good: granted)
             Spacer()
             if !granted {
                 Button("Open Settings") { openPrivacyPane(pane) }
-                    .buttonStyle(.borderless)
+                    .buttonStyle(SettingsBorderedButtonStyle())
             }
         }
     }
@@ -489,5 +532,56 @@ struct SettingsPage: View {
         let normalized = text.trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: ",", with: ".")
         return normalized.isEmpty ? nil : Double(normalized)
+    }
+}
+
+/// Wraps a control row in a soft cream highlight that fades in on hover.
+private struct HoverHighlightRow<Content: View>: View {
+    let content: Content
+    @State private var hovering = false
+
+    init(_ content: Content) {
+        self.content = content
+    }
+
+    var body: some View {
+        content
+            .padding(.horizontal, 8)
+            .padding(.vertical, 6)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(Theme.cream.opacity(hovering ? 0.8 : 0))
+            )
+            .contentShape(RoundedRectangle(cornerRadius: 9))
+            .onHover { hovering = $0 }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
+    }
+}
+
+/// Bordered, navy-tinted secondary button with hover and pressed feedback.
+/// Used for the non-primary actions on the page so they feel consistent.
+private struct SettingsBorderedButtonStyle: ButtonStyle {
+    @State private var hovering = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .font(.system(size: 13, weight: .medium))
+            .foregroundStyle(Theme.navy)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 7)
+            .background(
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Theme.navy.opacity(hovering ? 0.1 : 0.05))
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Theme.navy.opacity(hovering ? 0.45 : 0.25), lineWidth: 1)
+            )
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .onHover { hovering = $0 }
+            .animation(.spring(response: 0.3, dampingFraction: 0.8),
+                       value: configuration.isPressed)
+            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
     }
 }
