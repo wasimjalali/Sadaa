@@ -5,6 +5,7 @@ enum HUDDisplay: Equatable {
     case recording(seconds: Int, level: Float)
     case transcribing
     case delivering
+    case optimizing(target: String)
     case error(String)
 }
 
@@ -27,6 +28,13 @@ struct HUDView: View {
             case .delivering:
                 ProgressView().controlSize(.mini).tint(Theme.gold)
                 Text("Inserting")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.cream)
+            case .optimizing(let target):
+                Image(systemName: "wand.and.stars")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.gold)
+                Text("Optimizing for \(target)")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.cream)
             case .error(let message):
