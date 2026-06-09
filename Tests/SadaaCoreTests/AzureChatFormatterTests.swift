@@ -67,6 +67,70 @@ import Foundation
         #expect(result.text == "Polished.")
     }
 
+    @Test func testOptimizeStampsPromptModeAndTarget() async throws {
+        ChatStubURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"{"choices":[{"message":{"content":"{\"text\":\"Optimized.\",\"newTerms\":[]}"}}]}"#
+            return (response, Data(body.utf8))
+        }
+        let formatter = AzureChatFormatter(config: config,
+                                           session: ChatStubURLProtocol.session())
+        let result = try await formatter.optimize(
+            rawTranscript: "raw", context: context(),
+            pack: ModelPackLibrary.pack(for: .claude))
+        #expect(result.text == "Optimized.")
+        #expect(result.mode == .prompt)
+        #expect(result.promptTarget == "Claude")
+    }
+
+    @Test func testOptimizeMalformedContentThrowsInsteadOfDeliveringVerbatim() async throws {
+        // The optimizer promises {text, newTerms} JSON. When the model answers
+        // with anything else, delivering it verbatim pastes garbage into the
+        // user's editor; the pipeline must fall back to the raw transcript.
+        ChatStubURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"{"choices":[{"message":{"content":"Sure! Here is your optimized prompt."}}]}"#
+            return (response, Data(body.utf8))
+        }
+        let formatter = AzureChatFormatter(config: config,
+                                           session: ChatStubURLProtocol.session())
+        do {
+            _ = try await formatter.optimize(
+                rawTranscript: "raw", context: context(),
+                pack: ModelPackLibrary.pack(for: .gpt))
+            Issue.record("expected ProviderError.badResponse")
+        } catch {
+            guard case ProviderError.badResponse = error else {
+                Issue.record("expected badResponse, got \(error)")
+                return
+            }
+        }
+    }
+
+    @Test func testOptimizeEmptyInnerTextThrows() async throws {
+        ChatStubURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"{"choices":[{"message":{"content":"{\"text\":\"  \",\"newTerms\":[]}"}}]}"#
+            return (response, Data(body.utf8))
+        }
+        let formatter = AzureChatFormatter(config: config,
+                                           session: ChatStubURLProtocol.session())
+        do {
+            _ = try await formatter.optimize(
+                rawTranscript: "raw", context: context(),
+                pack: ModelPackLibrary.pack(for: .claude))
+            Issue.record("expected ProviderError.badResponse")
+        } catch {
+            guard case ProviderError.badResponse = error else {
+                Issue.record("expected badResponse, got \(error)")
+                return
+            }
+        }
+    }
+
     @Test func testHTTPErrorThrows() async throws {
         ChatStubURLProtocol.handler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 401,

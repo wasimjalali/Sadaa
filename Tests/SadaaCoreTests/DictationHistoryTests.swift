@@ -22,6 +22,42 @@ import Foundation
                         provider: "azure", durationSeconds: 1.5)
     }
 
+    @Test func testLegacyRecordWithoutModeDecodes() throws {
+        // history.json written before the mode/promptTarget fields existed.
+        let legacy = """
+        [{"id":"00000000-0000-0000-0000-000000000001","text":"old one",
+          "createdAt":"2026-06-01T10:00:00Z","language":"en",
+          "provider":"azure","durationSeconds":2.5}]
+        """
+        try Data(legacy.utf8).write(to: fileURL)
+        let history = DictationHistory(fileURL: fileURL)
+        let all = history.all()
+        #expect(all.count == 1)
+        #expect(all.first?.text == "old one")
+        #expect(all.first?.mode == nil)
+        #expect(all.first?.promptTarget == nil)
+    }
+
+    @Test func testModeAndTargetRoundTrip() throws {
+        let history = DictationHistory(fileURL: fileURL)
+        history.append(DictationRecord(
+            text: "optimized", createdAt: Date(timeIntervalSince1970: 1_000),
+            language: "en", provider: "azure", durationSeconds: 1,
+            mode: .prompt, promptTarget: "Claude"))
+        let reloaded = DictationHistory(fileURL: fileURL)
+        #expect(reloaded.all().first?.mode == .prompt)
+        #expect(reloaded.all().first?.promptTarget == "Claude")
+    }
+
+    @Test func testWithEstimatedCostPreservesModeAndTarget() {
+        let record = DictationRecord(
+            text: "x", createdAt: Date(), language: nil, provider: "azure",
+            durationSeconds: 1, mode: .prompt, promptTarget: "GPT")
+        let updated = record.withEstimatedCost(0.01)
+        #expect(updated.mode == .prompt)
+        #expect(updated.promptTarget == "GPT")
+    }
+
     @Test func testRoundTripPersists() throws {
         let history = DictationHistory(fileURL: fileURL)
         let first = record("first", at: Date(timeIntervalSince1970: 1_000))

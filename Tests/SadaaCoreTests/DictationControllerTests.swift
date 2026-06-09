@@ -369,6 +369,99 @@ struct FakeProvider: TranscriptionProvider {
         #expect(delivered == [])
     }
 
+    @Test func testPromptModeResultRecordsModeAndTarget() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "make a button", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            FormattingResult(text: "optimized prompt", newTerms: [],
+                             mode: .prompt, promptTarget: "Claude")
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(records.first?.mode == .prompt)
+        #expect(records.first?.promptTarget == "Claude")
+    }
+
+    @Test func testFormattedResultRecordsFormattedMode() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { raw, _ in
+            FormattingResult(text: raw, newTerms: [])
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(records.first?.mode == .formatted)
+        #expect(records.first?.promptTarget == nil)
+    }
+
+    @Test func testRawModeRecordsRawMode() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { raw, _ in
+            FormattingResult(text: raw, newTerms: [])
+        }
+        controller.toggle()
+        controller.toggle(rawMode: true)
+        await controller.toggleAndWait()
+        #expect(records.first?.mode == .raw)
+    }
+
+    @Test func testFormatterFailureRecordsRawMode() async throws {
+        struct Boom: Error {}
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "hello", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            throw Boom()
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(records.first?.mode == .raw)
+        #expect(records.first?.promptTarget == nil)
+    }
+
+    @Test func testRetryUsesContextCapturedAtDictationTime() async throws {
+        // The bug: retryLast resolved the frontmost app at retry time, so a
+        // retry clicked from Sadaa's own window formatted for Sadaa, not for
+        // the app the user dictated into.
+        var attempt = 0
+        let failing = FakeProvider(name: "p1",
+                                   result: .failure(ProviderError.http(500, "boom")))
+        let working = FakeProvider(name: "p2",
+            result: .success(Transcript(text: "ok", detectedLanguage: nil,
+                                        durationSeconds: nil)))
+        var bundleAtFormat: String?
+        var contextCalls = 0
+        let controller = DictationController(
+            recorder: recorder,
+            providers: { attempt += 1; return attempt == 1 ? [failing] : [working] },
+            store: store,
+            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
+            recordingsToKeep: 10,
+            deliver: { [weak self] text in self?.delivered.append(text) },
+            record: { [weak self] record in self?.records.append(record) },
+            format: { _, ctx in
+                bundleAtFormat = ctx.appBundleID
+                return FormattingResult(text: "formatted", newTerms: [])
+            },
+            context: {
+                contextCalls += 1
+                return FormattingContext(
+                    appBundleID: contextCalls == 1 ? "com.target.app" : "ai.karko.sadaa",
+                    dictionaryWords: [], speakerContext: "", language: .auto)
+            })
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(controller.canRetry)
+
+        await controller.retryLastAndWait()
+        #expect(delivered == ["formatted"])
+        #expect(bundleAtFormat == "com.target.app")
+    }
+
     @Test func testNoProvidersConfigured() async {
         let controller = makeController(providers: [])
         controller.toggle()

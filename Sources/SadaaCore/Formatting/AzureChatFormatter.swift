@@ -131,9 +131,10 @@ public final class AzureChatFormatter: @unchecked Sendable {
     }
 
     /// Rewrites a dictation into an optimized prompt for the pack's model
-    /// family. Same network handling and parsing as format(); on a non-JSON
-    /// response it falls back to the raw transcript so the dictation is never
-    /// lost.
+    /// family. Same network handling as format(), but parsing is strict: the
+    /// optimizer promised {text, newTerms} JSON, and anything else is a failure
+    /// (thrown), so the pipeline falls back to the raw transcript instead of
+    /// pasting a malformed response verbatim.
     public func optimize(rawTranscript: String,
                          context: FormattingContext,
                          pack: ModelPack) async throws -> FormattingResult {
@@ -157,7 +158,10 @@ public final class AzureChatFormatter: @unchecked Sendable {
             throw ProviderError.http(http.statusCode,
                                      String(decoding: data, as: UTF8.self))
         }
-        return try Self.parse(data, fallbackRaw: rawTranscript)
+        let parsed = try Self.parseOptimized(data)
+        return FormattingResult(text: parsed.text, newTerms: parsed.newTerms,
+                                mode: .prompt,
+                                promptTarget: pack.id.displayName)
     }
 
     // MARK: - Voice edit (rewrite a selection per a spoken instruction)
@@ -262,5 +266,34 @@ public final class AzureChatFormatter: @unchecked Sendable {
         return FormattingResult(
             text: content.trimmingCharacters(in: .whitespacesAndNewlines),
             newTerms: [])
+    }
+
+    /// Strict variant for Prompt Mode: the assistant content MUST decode as
+    /// {text, newTerms} with non-empty text. Unlike `parse`, a malformed
+    /// response throws instead of being delivered verbatim, because pasting a
+    /// broken optimizer reply into the user's editor is worse than pasting
+    /// the raw dictation.
+    static func parseOptimized(_ data: Data) throws -> FormattingResult {
+        struct Completion: Decodable {
+            struct Choice: Decodable {
+                struct Message: Decodable { let content: String? }
+                let message: Message
+            }
+            let choices: [Choice]
+        }
+        guard let completion = try? JSONDecoder().decode(Completion.self, from: data),
+              let content = completion.choices.first?.message.content,
+              !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw ProviderError.badResponse
+        }
+
+        struct Inner: Decodable { let text: String; let newTerms: [String]? }
+        guard let inner = try? JSONDecoder().decode(Inner.self, from: Data(content.utf8)) else {
+            throw ProviderError.badResponse
+        }
+        let text = inner.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { throw ProviderError.badResponse }
+        return FormattingResult(text: text,
+                                newTerms: Array((inner.newTerms ?? []).prefix(3)))
     }
 }

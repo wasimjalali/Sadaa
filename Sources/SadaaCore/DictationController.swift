@@ -37,6 +37,10 @@ public final class DictationController {
     /// Audio from the last dictation whose providers all failed. Spec section 5:
     /// the recording is kept so the user can retry without re-recording.
     private var lastFailedAudio: URL?
+    /// Formatting context captured when that dictation was recorded. Retry must
+    /// format for the app the user dictated into, not for whatever is frontmost
+    /// when they click Retry (usually Sadaa itself).
+    private var lastFailedContext: FormattingContext?
 
     /// True when a failed dictation can be retried on its retained audio.
     public var canRetry: Bool { lastFailedAudio != nil }
@@ -108,7 +112,11 @@ public final class DictationController {
         case .idle, .error: break
         }
         state = .transcribing
-        processingTask = Task { await process(audioURL: url, measuredDuration: nil) }
+        let savedContext = lastFailedContext
+        processingTask = Task {
+            await process(audioURL: url, measuredDuration: nil,
+                          presetContext: savedContext)
+        }
     }
 
     /// Test helper that awaits the retry.
@@ -156,7 +164,12 @@ public final class DictationController {
 
     /// Transcribes, formats, records, and delivers a recorded audio file. Shared
     /// by the normal stop path and retryLast(). state is already .transcribing.
-    private func process(audioURL: URL, measuredDuration: Double?) async {
+    /// The formatting context is captured up front, while the user is still in
+    /// the app they dictated into; a retry reuses the context captured when the
+    /// failed dictation was recorded (presetContext).
+    private func process(audioURL: URL, measuredDuration: Double?,
+                         presetContext: FormattingContext? = nil) async {
+        let formattingContext = presetContext ?? context()
         let chain = providers()
         guard !chain.isEmpty else {
             state = .error("No transcription provider configured. Open Settings.")
@@ -180,8 +193,10 @@ public final class DictationController {
         }
 
         guard let transcript else {
-            // Keep the audio so the user can retry without re-recording.
+            // Keep the audio (and its context) so the user can retry without
+            // re-recording.
             lastFailedAudio = audioURL
+            lastFailedContext = formattingContext
             let detail = (lastError as? ProviderError).map(Self.describe)
                 ?? lastError?.localizedDescription ?? "unknown error"
             state = .error("Transcription failed: \(detail)")
@@ -189,6 +204,7 @@ public final class DictationController {
         }
         // Transcription succeeded: any earlier failure is resolved.
         lastFailedAudio = nil
+        lastFailedContext = nil
 
         // No speech in the whole recording: discard with a notice. Nothing is
         // formatted, recorded, or delivered (an empty deliver would also wipe the
@@ -203,13 +219,17 @@ public final class DictationController {
         try? store.saveTranscript(transcript.text, for: audioURL)
 
         var finalText = transcript.text
+        var mode: FormattingMode = .raw
+        var promptTarget: String?
         if !pendingRawMode, let format {
             do {
-                let result = try await format(transcript.text, context())
+                let result = try await format(transcript.text, formattingContext)
                 finalText = result.text
+                mode = result.mode
+                promptTarget = result.promptTarget
                 if !result.newTerms.isEmpty { suggestTerms(result.newTerms) }
             } catch {
-                formatterFellBack()   // keep raw finalText
+                formatterFellBack()   // keep raw finalText; mode stays .raw
             }
         }
         pendingRawMode = false
@@ -219,7 +239,9 @@ public final class DictationController {
             createdAt: Date(),
             language: transcript.detectedLanguage,
             provider: usedProvider ?? "unknown",
-            durationSeconds: transcript.durationSeconds ?? measuredDuration))
+            durationSeconds: transcript.durationSeconds ?? measuredDuration,
+            mode: mode,
+            promptTarget: promptTarget))
 
         state = .delivering
         deliver(finalText)
