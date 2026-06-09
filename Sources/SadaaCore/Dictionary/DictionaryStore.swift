@@ -8,27 +8,32 @@ public final class DictionaryStore {
         var entries: [DictionaryEntry]
         var dismissed: [String]
         var pending: [String]
+        /// Keyed by canonical term; optional so legacy JSON without this field
+        /// still decodes successfully.
+        var pendingCounts: [String: Int]?
     }
 
     private let fileURL: URL
     private var entries: [DictionaryEntry]   // newest/most-recent first
-    private var dismissed: [String]          // lowercased, never suggested again
-    private var pending: [String]            // awaiting accept/dismiss
+    private var dismissed: [String]          // canonical form, never suggested again
+    private var pending: [String]            // awaiting accept/dismiss, insertion order
+    private var pendingCounts: [String: Int] // keyed by canonical
 
     public init(fileURL: URL) {
         self.fileURL = fileURL
         guard let data = try? Data(contentsOf: fileURL) else {
-            entries = []; dismissed = []; pending = []
+            entries = []; dismissed = []; pending = []; pendingCounts = [:]
             return
         }
         if let decoded = try? JSONDecoder().decode(Persisted.self, from: data) {
             entries = decoded.entries
             dismissed = decoded.dismissed
             pending = decoded.pending
+            pendingCounts = decoded.pendingCounts ?? [:]
         } else {
             try? FileManager.default.moveItem(
                 at: fileURL, to: fileURL.appendingPathExtension("bak"))
-            entries = []; dismissed = []; pending = []
+            entries = []; dismissed = []; pending = []; pendingCounts = [:]
         }
     }
 
@@ -39,7 +44,8 @@ public final class DictionaryStore {
     public func add(word: String, soundsLike: String? = nil) {
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        entries.removeAll { $0.word.caseInsensitiveCompare(trimmed) == .orderedSame }
+        // Dedupe using canonical matches instead of exact case-insensitive compare.
+        entries.removeAll { TermMatcher.matches($0.word, trimmed) }
         entries.insert(DictionaryEntry(word: trimmed, soundsLike: soundsLike), at: 0)
         save()
     }
@@ -50,12 +56,12 @@ public final class DictionaryStore {
     }
 
     /// Personal words (most-recent first) then base terms, de-duped
-    /// case-insensitively and capped at `budget`. Spec section 4 step 2.
+    /// by canonical key and capped at `budget`. Spec section 4 step 2.
     public func biasList(budget: Int) -> [String] {
         var seen = Set<String>()
         var result: [String] = []
         for word in entries.map(\.word) + BaseVocabulary.terms {
-            let key = word.lowercased()
+            let key = TermMatcher.canonical(word)
             if seen.insert(key).inserted { result.append(word) }
             if result.count == budget { break }
         }
@@ -64,37 +70,104 @@ public final class DictionaryStore {
 
     // MARK: - Suggestions
 
-    public func pendingSuggestions() -> [String] { pending }
+    /// Pending suggestions sorted by count descending, ties in insertion order.
+    public func pendingSuggestions() -> [String] {
+        pending.sorted { a, b in
+            let ca = TermMatcher.canonical(a)
+            let cb = TermMatcher.canonical(b)
+            let countA = pendingCounts[ca] ?? 1
+            let countB = pendingCounts[cb] ?? 1
+            return countA > countB
+        }
+    }
 
-    /// Queues formatter-guessed terms that are not already personal, not
-    /// dismissed, and not already pending. Keeps at most the 10 newest.
+    /// Queues formatter-guessed terms that pass quality filters, are not
+    /// already personal, not BaseVocabulary terms, and not dismissed.
+    /// When a term canonically matches an already-pending term, bumps that
+    /// term's count instead of adding a duplicate. Keeps at most 10 pending,
+    /// dropping the lowest-count oldest first when over cap.
     public func suggest(_ terms: [String]) {
         for term in terms {
-            let trimmed = term.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard !trimmed.isEmpty else { continue }
-            let key = trimmed.lowercased()
-            if dismissed.contains(key) { continue }
-            if pending.contains(where: { $0.lowercased() == key }) { continue }
-            if entries.contains(where: { $0.word.lowercased() == key }) { continue }
-            pending.append(trimmed)
+            let can = TermMatcher.canonical(term)
+
+            // Quality filter: empty canonical.
+            guard !can.isEmpty else { continue }
+            // Quality filter: fewer than 3 characters.
+            guard can.count >= 3 else { continue }
+            // Quality filter: no letters at all.
+            guard can.contains(where: { $0.isLetter }) else { continue }
+            // Quality filter: more than 4 space-separated words.
+            guard can.split(separator: " ").count <= 4 else { continue }
+
+            // Reject if it matches any saved entry.
+            if entries.contains(where: { TermMatcher.matches($0.word, term) }) { continue }
+            // Reject if it matches any BaseVocabulary term.
+            if BaseVocabulary.terms.contains(where: { TermMatcher.matches($0, term) }) { continue }
+            // Reject if it matches any dismissed canonical.
+            if dismissed.contains(where: { TermMatcher.matches($0, can) }) { continue }
+
+            // If it matches an already-pending term, bump count and move on.
+            if let existingIndex = pending.firstIndex(where: { TermMatcher.matches($0, term) }) {
+                let existingCan = TermMatcher.canonical(pending[existingIndex])
+                pendingCounts[existingCan, default: 1] += 1
+                continue
+            }
+
+            // New term: append and initialise count.
+            pending.append(term)
+            pendingCounts[can] = 1
         }
-        if pending.count > 10 { pending.removeFirst(pending.count - 10) }
+
+        // Enforce cap of 10: drop lowest-count oldest first.
+        while pending.count > 10 {
+            // Find the index of the first term with the minimum count.
+            let minCount = pending.map { pendingCounts[TermMatcher.canonical($0)] ?? 1 }.min() ?? 1
+            if let idx = pending.firstIndex(where: {
+                (pendingCounts[TermMatcher.canonical($0)] ?? 1) == minCount
+            }) {
+                pendingCounts.removeValue(forKey: TermMatcher.canonical(pending[idx]))
+                pending.remove(at: idx)
+            } else {
+                pending.removeFirst()
+            }
+        }
+
         save()
     }
 
     public func accept(_ term: String) {
-        pending.removeAll { $0.caseInsensitiveCompare(term) == .orderedSame }
+        removeFromPending(matching: term)
         add(word: term) // save() called inside add()
     }
 
     public func dismiss(_ term: String) {
-        pending.removeAll { $0.caseInsensitiveCompare(term) == .orderedSame }
-        dismissed.append(term.lowercased())
+        removeFromPending(matching: term)
+        let can = TermMatcher.canonical(term)
+        dismissed.append(can)
+        // Cap dismissed at 200, oldest dropped first.
+        if dismissed.count > 200 {
+            dismissed.removeFirst(dismissed.count - 200)
+        }
         save()
     }
 
+    // MARK: - Private helpers
+
+    private func removeFromPending(matching term: String) {
+        let toRemove = pending.filter { TermMatcher.matches($0, term) }
+        for t in toRemove {
+            pendingCounts.removeValue(forKey: TermMatcher.canonical(t))
+        }
+        pending.removeAll { TermMatcher.matches($0, term) }
+    }
+
     private func save() {
-        let snapshot = Persisted(entries: entries, dismissed: dismissed, pending: pending)
+        let snapshot = Persisted(
+            entries: entries,
+            dismissed: dismissed,
+            pending: pending,
+            pendingCounts: pendingCounts
+        )
         if let data = try? JSONEncoder().encode(snapshot) {
             try? data.write(to: fileURL, options: .atomic)
         }
