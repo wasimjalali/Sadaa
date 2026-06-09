@@ -42,7 +42,7 @@ public enum ModelPackLibrary {
         }
     }
 
-    static let claudeGuidance = """
+    private static let claudeGuidance = """
     When the target is a Claude model (Opus, Sonnet, Haiku, Fable and their successors, including Claude Code):
 
     - Lead with context, then the instruction. Claude reasons best when it knows the situation before it's told what to do. Open with the relevant background the speaker gave (the project, the file, the bug), then state the task.
@@ -61,7 +61,7 @@ public enum ModelPackLibrary {
     General (non-coding) Claude prompts: same shape, lighter. Context first, then a direct ask, then the desired output form (a list, a paragraph, a table). Tags only when there's source material to quote. Don't over-structure a simple request.
     """
 
-    static let gptGuidance = """
+    private static let gptGuidance = """
     When the target is a GPT model (GPT-4.x, GPT-5.x, the o-series, Codex and their successors):
 
     - GPT-5 and Codex follow instructions very literally. Remove every ambiguity and contradiction. If the dictation says "make it fast but also log everything", resolve or rank the tension so the model isn't pulled two ways.
@@ -79,7 +79,7 @@ public enum ModelPackLibrary {
     General (non-coding) GPT prompts: same literalness rules. Most important instruction first, explicit output format, no vague qualifiers. Use headers only when the request has distinct parts. Keep a short ask short.
     """
 
-    static let geminiGuidance = """
+    private static let geminiGuidance = """
     When the target is a Gemini model (Gemini family and Gemini CLI, including their successors):
 
     - Open with a clear preamble that states the role and the task in one or two sentences: "You are working in a TypeScript repo. Task: add retry logic to the API client." Gemini responds well to a stated role plus an explicit objective up front.
@@ -97,7 +97,7 @@ public enum ModelPackLibrary {
     General (non-coding) Gemini prompts: role and task preamble, a Context section if there's material to ground on, explicit output format and length. Examples help. Keep a short request short.
     """
 
-    static let genericGuidance = """
+    private static let genericGuidance = """
     When the target model is unknown or unlisted, apply distilled cross-model best practices:
 
     - State the goal first, in one clear sentence. What should the model produce or accomplish?
