@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SadaaCore
 
@@ -17,6 +18,13 @@ struct HUDView: View {
 
     var body: some View {
         HStack(spacing: 7) {
+            // The app icon gives the pill its identity at a glance. The icns
+            // ships in the bundle's Resources; unbundled dev runs just show
+            // the generic icon, which is fine.
+            Image(nsImage: NSApp.applicationIconImage)
+                .resizable()
+                .interpolation(.high)
+                .frame(width: 16, height: 16)
             switch display {
             case .recording(let seconds, let level):
                 LevelBars(level: level)
