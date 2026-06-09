@@ -39,7 +39,7 @@ Modified:
 
 Steps:
 
-- [ ] Write the file. `ModelPackID` is the four-case enum with a `displayName`; `ModelPack` pairs an id with its guidance string. COMPLETE code:
+- [x] Write the file. `ModelPackID` is the four-case enum with a `displayName`; `ModelPack` pairs an id with its guidance string. COMPLETE code:
 
 ```swift
 import Foundation
@@ -72,8 +72,8 @@ public struct ModelPack: Equatable, Sendable {
 }
 ```
 
-- [ ] Run `swift build`. Expected output: `Build complete!` (the file compiles; nothing references it yet).
-- [ ] Commit: `feat: add ModelPack types for Prompt Mode`.
+- [x] Run `swift build`. Expected output: `Build complete!` (the file compiles; nothing references it yet).
+- [x] Commit: `feat: add ModelPack types for Prompt Mode`.
 
 ---
 
@@ -85,7 +85,7 @@ public struct ModelPack: Equatable, Sendable {
 
 Steps:
 
-- [ ] Write the failing test first. COMPLETE code:
+- [x] Write the failing test first. COMPLETE code:
 
 ```swift
 import Testing
@@ -161,8 +161,8 @@ import Foundation
 }
 ```
 
-- [ ] Run `make test`. Expected failure: compile error, `cannot find 'ModelPackLibrary' in scope` (the type does not exist yet).
-- [ ] Write the implementation. The four guidance strings below are final copy and must be embedded verbatim. COMPLETE code:
+- [x] Run `make test`. Expected failure: compile error, `cannot find 'ModelPackLibrary' in scope` (the type does not exist yet).
+- [x] Write the implementation. The four guidance strings below are final copy and must be embedded verbatim. COMPLETE code:
 
 ```swift
 import Foundation
@@ -284,8 +284,8 @@ public enum ModelPackLibrary {
 }
 ```
 
-- [ ] Run `make test`. Expected output: the six `ModelPackLibraryTests` pass; suite total grows by 6 with no failures.
-- [ ] Commit: `feat: add ModelPackLibrary with built-in packs and on-disk overrides`.
+- [x] Run `make test`. Expected output: the six `ModelPackLibraryTests` pass; suite total grows by 6 with no failures.
+- [x] Commit: `feat: add ModelPackLibrary with built-in packs and on-disk overrides`.
 
 ---
 
@@ -297,7 +297,7 @@ public enum ModelPackLibrary {
 
 Steps:
 
-- [ ] Write the failing test first. COMPLETE code:
+- [x] Write the failing test first. COMPLETE code:
 
 ```swift
 import Testing
@@ -371,8 +371,8 @@ import Testing
 }
 ```
 
-- [ ] Run `make test`. Expected failure: compile error, `cannot find 'ModelPackResolver' in scope`.
-- [ ] Write the implementation. Scan only the first 6 words and last 8 words; the trailing window is checked first because trailing meta-mentions are the common case. COMPLETE code:
+- [x] Run `make test`. Expected failure: compile error, `cannot find 'ModelPackResolver' in scope`.
+- [x] Write the implementation. Scan only the first 6 words and last 8 words; the trailing window is checked first because trailing meta-mentions are the common case. COMPLETE code:
 
 ```swift
 import Foundation
@@ -439,8 +439,8 @@ public enum ModelPackResolver {
 }
 ```
 
-- [ ] Run `make test`. Expected output: the ten `ModelPackResolverTests` pass with no failures.
-- [ ] Commit: `feat: detect the Prompt Mode target model from the dictated transcript`.
+- [x] Run `make test`. Expected output: the ten `ModelPackResolverTests` pass with no failures.
+- [x] Commit: `feat: detect the Prompt Mode target model from the dictated transcript`.
 
 ---
 
@@ -452,7 +452,7 @@ public enum ModelPackResolver {
 
 Steps:
 
-- [ ] Write the failing test first. COMPLETE code:
+- [x] Write the failing test first. COMPLETE code:
 
 ```swift
 import Testing
@@ -548,8 +548,8 @@ import Testing
 }
 ```
 
-- [ ] Run `make test`. Expected failure: compile error, `cannot find 'PromptOptimizerPromptBuilder' in scope`.
-- [ ] Write the implementation. It appends lines the same way `FormattingPromptBuilder` does, with the language switch mirroring the formatter's three cases but phrased for prompts. COMPLETE code:
+- [x] Run `make test`. Expected failure: compile error, `cannot find 'PromptOptimizerPromptBuilder' in scope`.
+- [x] Write the implementation. It appends lines the same way `FormattingPromptBuilder` does, with the language switch mirroring the formatter's three cases but phrased for prompts. COMPLETE code:
 
 ```swift
 import Foundation
@@ -614,8 +614,8 @@ public enum PromptOptimizerPromptBuilder {
 }
 ```
 
-- [ ] Run `make test`. Expected output: the eleven `PromptOptimizerPromptBuilderTests` pass with no failures.
-- [ ] Commit: `feat: assemble the Prompt Mode optimizer system prompt`.
+- [x] Run `make test`. Expected output: the eleven `PromptOptimizerPromptBuilderTests` pass with no failures.
+- [x] Commit: `feat: assemble the Prompt Mode optimizer system prompt`.
 
 ---
 
@@ -629,7 +629,7 @@ public enum PromptOptimizerPromptBuilder {
 
 Steps:
 
-- [ ] Write the failing test first. COMPLETE code:
+- [x] Write the failing test first. COMPLETE code:
 
 ```swift
 import Testing
@@ -691,8 +691,8 @@ import Foundation
 }
 ```
 
-- [ ] Run `make test`. Expected failure: compile error, `value of type 'AzureChatFormatter' has no member 'makeOptimizeRequest'`.
-- [ ] Write the implementation. Insert this block immediately after the closing brace of `format(...)` (current line 92) and before the line `// MARK: - Voice edit (rewrite a selection per a spoken instruction)` (current line 94). It is identical plumbing to `makeRequest`/`format`, only the system prompt source differs. COMPLETE code:
+- [x] Run `make test`. Expected failure: compile error, `value of type 'AzureChatFormatter' has no member 'makeOptimizeRequest'`.
+- [x] Write the implementation. Insert this block immediately after the closing brace of `format(...)` (current line 92) and before the line `// MARK: - Voice edit (rewrite a selection per a spoken instruction)` (current line 94). It is identical plumbing to `makeRequest`/`format`, only the system prompt source differs. COMPLETE code:
 
 ```swift
 
@@ -766,8 +766,8 @@ import Foundation
     }
 ```
 
-- [ ] Run `make test`. Expected output: the two `PromptOptimizeRequestTests` pass; the existing `AzureChatFormatterTests` still pass.
-- [ ] Commit: `feat: add AzureChatFormatter.optimize for Prompt Mode`.
+- [x] Run `make test`. Expected output: the two `PromptOptimizeRequestTests` pass; the existing `AzureChatFormatterTests` still pass.
+- [x] Commit: `feat: add AzureChatFormatter.optimize for Prompt Mode`.
 
 ---
 
@@ -779,7 +779,7 @@ import Foundation
 
 Steps:
 
-- [ ] Write the failing test first. Replace the existing `testDefaults` body (lines 16-25):
+- [x] Write the failing test first. Replace the existing `testDefaults` body (lines 16-25):
 
 Existing code (lines 16-25):
 
@@ -819,8 +819,8 @@ Replacement:
     }
 ```
 
-- [ ] Run `make test`. Expected failure: compile error, `value of type 'AppSettings' has no member 'promptModeEnabled'`.
-- [ ] Write the implementation. First add the four keys. Existing tail of the `Keys` enum (lines 27-29):
+- [x] Run `make test`. Expected failure: compile error, `value of type 'AppSettings' has no member 'promptModeEnabled'`.
+- [x] Write the implementation. First add the four keys. Existing tail of the `Keys` enum (lines 27-29):
 
 ```swift
         static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
@@ -840,7 +840,7 @@ Replacement:
     }
 ```
 
-- [ ] Add the four computed vars. Existing tail of the class (lines 147-151):
+- [x] Add the four computed vars. Existing tail of the class (lines 147-151):
 
 ```swift
     public var formatterRatePer1kChars: Double {
@@ -890,8 +890,8 @@ Replacement:
 }
 ```
 
-- [ ] Run `make test`. Expected output: `testPromptModeDefaults` passes; `testDefaults` still passes.
-- [ ] Commit: `feat: add Prompt Mode settings to AppSettings`.
+- [x] Run `make test`. Expected output: `testPromptModeDefaults` passes; `testDefaults` still passes.
+- [x] Commit: `feat: add Prompt Mode settings to AppSettings`.
 
 ---
 
@@ -903,7 +903,7 @@ Replacement:
 
 Steps:
 
-- [ ] Add the enum case. Existing `HUDDisplay` (lines 4-9):
+- [x] Add the enum case. Existing `HUDDisplay` (lines 4-9):
 
 ```swift
 enum HUDDisplay: Equatable {
@@ -926,7 +926,7 @@ enum HUDDisplay: Equatable {
 }
 ```
 
-- [ ] Add the render branch. Existing `.delivering` branch (lines 27-31):
+- [x] Add the render branch. Existing `.delivering` branch (lines 27-31):
 
 ```swift
             case .delivering:
@@ -953,9 +953,9 @@ Replacement:
                     .foregroundStyle(Theme.cream)
 ```
 
-- [ ] Run `swift build`. Expected output: `Build complete!`.
-- [ ] Run `make test`. Expected output: full suite still green (no behavior changed in SadaaCore).
-- [ ] Commit: `feat: add the optimizing HUD state for Prompt Mode`.
+- [x] Run `swift build`. Expected output: `Build complete!`.
+- [x] Run `make test`. Expected output: full suite still green (no behavior changed in SadaaCore).
+- [x] Commit: `feat: add the optimizing HUD state for Prompt Mode`.
 
 ---
 
@@ -973,7 +973,7 @@ Replacement:
 
 Steps:
 
-- [ ] Add the stored property. Existing (lines 9-11):
+- [x] Add the stored property. Existing (lines 9-11):
 
 ```swift
     private var statusItem: NSStatusItem?
@@ -990,7 +990,7 @@ Replacement:
     private let settings = AppSettings()
 ```
 
-- [ ] Rewrite the `format:` closure. Existing (lines 128-136):
+- [x] Rewrite the `format:` closure. Existing (lines 128-136):
 
 ```swift
             format: { [settings] raw, ctx in
@@ -1038,7 +1038,7 @@ Replacement:
             },
 ```
 
-- [ ] Add the two helpers next to `buildFormatter`. Existing `buildFormatter` ends at line 348:
+- [x] Add the two helpers next to `buildFormatter`. Existing `buildFormatter` ends at line 348:
 
 ```swift
         let config = AzureChatFormatter.Config(
@@ -1086,7 +1086,7 @@ Replacement:
     }
 ```
 
-- [ ] Add the menu item. Existing formatting-item block in `setUpStatusItem` (lines 551-559):
+- [x] Add the menu item. Existing formatting-item block in `setUpStatusItem` (lines 551-559):
 
 ```swift
         // Quick literal-dictation switch. When off, dictations are pure
@@ -1124,7 +1124,7 @@ Replacement:
         promptModeMenuItem = promptModeItem
 ```
 
-- [ ] Sync it in `menuWillOpen`. Existing (lines 577-579):
+- [x] Sync it in `menuWillOpen`. Existing (lines 577-579):
 
 ```swift
     func menuWillOpen(_ menu: NSMenu) {
@@ -1141,7 +1141,7 @@ Replacement:
     }
 ```
 
-- [ ] Add the toggle action. Existing `toggleSmartFormatting` (lines 585-590):
+- [x] Add the toggle action. Existing `toggleSmartFormatting` (lines 585-590):
 
 ```swift
     @objc private func toggleSmartFormatting() {
@@ -1169,9 +1169,9 @@ Replacement:
     }
 ```
 
-- [ ] Run `swift build`. Expected output: `Build complete!`.
-- [ ] Run `make test`. Expected output: full suite still green.
-- [ ] Commit: `feat: route dictations through Prompt Mode and add the menu toggle`.
+- [x] Run `swift build`. Expected output: `Build complete!`.
+- [x] Run `make test`. Expected output: full suite still green.
+- [x] Commit: `feat: route dictations through Prompt Mode and add the menu toggle`.
 
 ---
 
@@ -1187,7 +1187,7 @@ Replacement:
 
 Steps:
 
-- [ ] Add the `@State` vars. Existing (lines 17-19):
+- [x] Add the `@State` vars. Existing (lines 17-19):
 
 ```swift
     @State private var formattingEnabled = true
@@ -1207,7 +1207,7 @@ Replacement:
     @State private var speakerContext = ""
 ```
 
-- [ ] Place the card in the body. Existing card order (lines 49-56):
+- [x] Place the card in the body. Existing card order (lines 49-56):
 
 ```swift
                 hotkeyCard
@@ -1234,7 +1234,7 @@ Replacement:
                 permissionsCard
 ```
 
-- [ ] Add the card definition. Insert it directly after the `formattingCard` var (which ends at line 155 with its closing brace) and before `private var fallbackCard`. COMPLETE code:
+- [x] Add the card definition. Insert it directly after the `formattingCard` var (which ends at line 155 with its closing brace) and before `private var fallbackCard`. COMPLETE code:
 
 ```swift
     private var promptModeCard: some View {
@@ -1286,7 +1286,7 @@ Replacement:
     }
 ```
 
-- [ ] Load the new state. Existing tail of `load()` around the formatting block (lines 329-331):
+- [x] Load the new state. Existing tail of `load()` around the formatting block (lines 329-331):
 
 ```swift
         formattingEnabled = settings.formattingEnabled
@@ -1306,7 +1306,7 @@ Replacement:
         speakerContext = settings.speakerContext
 ```
 
-- [ ] Save the new state. Existing block in `save()` (lines 351-353):
+- [x] Save the new state. Existing block in `save()` (lines 351-353):
 
 ```swift
         settings.formattingEnabled = formattingEnabled
@@ -1329,9 +1329,9 @@ Replacement:
         settings.speakerContext = speakerContext
 ```
 
-- [ ] Run `swift build`. Expected output: `Build complete!`.
-- [ ] Run `make test`. Expected output: full suite still green.
-- [ ] Commit: `feat: add the Prompt mode settings card`.
+- [x] Run `swift build`. Expected output: `Build complete!`.
+- [x] Run `make test`. Expected output: full suite still green.
+- [x] Commit: `feat: add the Prompt mode settings card`.
 
 ---
 
@@ -1341,7 +1341,7 @@ Replacement:
 
 Steps:
 
-- [ ] Run `make test`. Expected output: every suite green, including the new `ModelPackLibraryTests` (6), `ModelPackResolverTests` (7), `PromptOptimizerPromptBuilderTests` (11), `PromptOptimizeRequestTests` (2), and the extended `AppSettingsTests`. Zero failures.
-- [ ] Run `swift build`. Expected output: `Build complete!` (the SadaaApp executable target compiles with the AppDelegate, HUD and SettingsPage changes).
-- [ ] Confirm no em dashes were introduced: `grep -rn $'—' Sources/SadaaCore/PromptMode Sources/SadaaApp/Pages/SettingsPage.swift Sources/SadaaApp/AppDelegate.swift Sources/SadaaApp/HUD/HUDView.swift`. Expected output: no matches.
-- [ ] No commit needed (verification task); the work is committed per task above.
+- [x] Run `make test`. Expected output: every suite green, including the new `ModelPackLibraryTests` (6), `ModelPackResolverTests` (7), `PromptOptimizerPromptBuilderTests` (11), `PromptOptimizeRequestTests` (2), and the extended `AppSettingsTests`. Zero failures.
+- [x] Run `swift build`. Expected output: `Build complete!` (the SadaaApp executable target compiles with the AppDelegate, HUD and SettingsPage changes).
+- [x] Confirm no em dashes were introduced: `grep -rn $'—' Sources/SadaaCore/PromptMode Sources/SadaaApp/Pages/SettingsPage.swift Sources/SadaaApp/AppDelegate.swift Sources/SadaaApp/HUD/HUDView.swift`. Expected output: no matches.
+- [x] No commit needed (verification task); the work is committed per task above.
