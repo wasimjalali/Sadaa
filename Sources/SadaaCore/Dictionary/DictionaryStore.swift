@@ -44,9 +44,17 @@ public final class DictionaryStore {
     public func add(word: String, soundsLike: String? = nil) {
         let trimmed = word.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        // Re-adding without an alias (accept() does this) must not wipe a
+        // "sounds like" the user set on the same word earlier.
+        let alias = soundsLike
+            ?? entries.first(where: { TermMatcher.matches($0.word, trimmed) })?.soundsLike
         // Dedupe using canonical matches instead of exact case-insensitive compare.
         entries.removeAll { TermMatcher.matches($0.word, trimmed) }
-        entries.insert(DictionaryEntry(word: trimmed, soundsLike: soundsLike), at: 0)
+        entries.insert(DictionaryEntry(word: trimmed, soundsLike: alias), at: 0)
+        // Adding a word resolves any matching pending suggestion; a stale chip
+        // would otherwise linger forever (suggest() skips terms matching
+        // entries, and accepting it would just re-add the word).
+        removeFromPending(matching: trimmed)
         save()
     }
 

@@ -31,6 +31,31 @@ import Foundation
         #expect(store.all().first?.word == "karko")
     }
 
+    @Test func testAddClearsMatchingPendingSuggestion() {
+        // Manually adding a word that is also a pending suggestion must resolve
+        // the suggestion; a stale chip would linger forever otherwise (suggest()
+        // skips terms matching entries, and accepting it just re-adds the word).
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = DictionaryStore(fileURL: url)
+        store.suggest(["Karko"])
+        #expect(store.pendingSuggestions() == ["Karko"])
+        store.add(word: "karko")
+        #expect(store.pendingSuggestions().isEmpty)
+    }
+
+    @Test func testReAddingWordWithoutAliasKeepsExistingAlias() {
+        // Accepting a suggestion calls add(word:) with no alias; that must not
+        // wipe a "sounds like" the user set on the same word earlier.
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = DictionaryStore(fileURL: url)
+        store.add(word: "Karko", soundsLike: "carco")
+        store.add(word: "Karko")
+        #expect(store.all().count == 1)
+        #expect(store.all().first?.soundsLike == "carco")
+    }
+
     @Test func testBiasListPersonalFirstThenBaseCapped() {
         let url = tempFile()
         defer { try? FileManager.default.removeItem(at: url) }
