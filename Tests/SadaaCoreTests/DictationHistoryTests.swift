@@ -83,4 +83,65 @@ import Foundation
         let decoded = try decoder.decode(DictationRecord.self, from: data)
         #expect(decoded == original)
     }
+
+    @Test func testDeleteRemovesExactRecord() throws {
+        let history = DictationHistory(fileURL: fileURL)
+        let r1 = record("first", at: Date(timeIntervalSince1970: 1_000))
+        let r2 = record("second", at: Date(timeIntervalSince1970: 2_000))
+        let r3 = record("third", at: Date(timeIntervalSince1970: 3_000))
+        history.append(r1)
+        history.append(r2)
+        history.append(r3)
+
+        history.delete(id: r2.id)
+
+        // In-memory check: only r1 and r3 remain, newest-first.
+        let inMemory = history.all()
+        #expect(inMemory.count == 2)
+        #expect(!inMemory.contains(where: { $0.id == r2.id }))
+        #expect(inMemory[0] == r3)
+        #expect(inMemory[1] == r1)
+
+        // Reload from disk to confirm persistence.
+        let reloaded = DictationHistory(fileURL: fileURL)
+        let onDisk = reloaded.all()
+        #expect(onDisk.count == 2)
+        #expect(!onDisk.contains(where: { $0.id == r2.id }))
+    }
+
+    @Test func testClearEmptiesAndPersists() throws {
+        let history = DictationHistory(fileURL: fileURL)
+        history.append(record("a", at: Date(timeIntervalSince1970: 1_000)))
+        history.append(record("b", at: Date(timeIntervalSince1970: 2_000)))
+
+        history.clear()
+
+        #expect(history.all().isEmpty)
+
+        // Reload from disk to confirm persistence.
+        let reloaded = DictationHistory(fileURL: fileURL)
+        #expect(reloaded.all().isEmpty)
+    }
+
+    @Test func testRetentionCapKeepsNewest1000() throws {
+        let history = DictationHistory(fileURL: fileURL)
+        let total = 1_005
+        for i in 0..<total {
+            history.append(record("item-\(i)", at: Date(timeIntervalSince1970: Double(i))))
+        }
+
+        // After inserting 1005 records the cap must have trimmed to 1000.
+        #expect(history.all().count == 1_000)
+
+        // The surviving records should be the newest ones (highest timestamps).
+        // The oldest surviving record was appended at index (total - 1000) = 5,
+        // which means its text is "item-5" but in newest-first order it is last.
+        let all = history.all()
+        #expect(all.last?.text == "item-5")
+        #expect(all.first?.text == "item-\(total - 1)")
+
+        // Reload and verify the cap survived persistence.
+        let reloaded = DictationHistory(fileURL: fileURL)
+        #expect(reloaded.all().count == 1_000)
+    }
 }

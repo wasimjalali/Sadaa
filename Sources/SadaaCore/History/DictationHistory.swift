@@ -38,12 +38,28 @@ public final class DictationHistory {
         }
     }
 
-    /// Insert newest-first, then persist the whole array. Write failure is swallowed.
+    // Maximum number of records kept in memory and on disk.
+    private let retentionCap = 1_000
+
+    /// Insert newest-first, enforce the retention cap, then persist. Write failure is swallowed.
     public func append(_ record: DictationRecord) {
         records.insert(record, at: 0)
-        if let data = try? DictationHistory.makeEncoder().encode(records) {
-            try? data.write(to: fileURL, options: .atomic)
+        if records.count > retentionCap {
+            records = Array(records.prefix(retentionCap))
         }
+        persist()
+    }
+
+    /// Remove the record with the given id and persist. No-op if id is not found.
+    public func delete(id: UUID) {
+        records.removeAll { $0.id == id }
+        persist()
+    }
+
+    /// Remove all records and persist.
+    public func clear() {
+        records = []
+        persist()
     }
 
     public func all() -> [DictationRecord] {
@@ -59,6 +75,14 @@ public final class DictationHistory {
         guard !trimmed.isEmpty else { return records }
         return records.filter {
             $0.text.range(of: trimmed, options: .caseInsensitive) != nil
+        }
+    }
+
+    // MARK: - Private helpers
+
+    private func persist() {
+        if let data = try? DictationHistory.makeEncoder().encode(records) {
+            try? data.write(to: fileURL, options: .atomic)
         }
     }
 }
