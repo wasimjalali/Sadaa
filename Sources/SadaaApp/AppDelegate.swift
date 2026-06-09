@@ -135,8 +135,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 // instead of just cleaning it up. The target can be named by
                 // voice; otherwise the app implies it (Claude desktop means
                 // Claude, ChatGPT means GPT) and the settings default is the
-                // final fallback.
-                if settings.promptModeEnabled,
+                // final fallback. Smart formatting stays the master switch:
+                // when it's off, no GPT touches the dictation, Prompt Mode
+                // included, exactly as the menu copy promises.
+                if settings.formattingEnabled,
+                   settings.promptModeEnabled,
                    let bundle = ctx.appBundleID,
                    settings.promptModeApps.contains(bundle),
                    let formatter = Self.buildPromptModeFormatter(settings: settings) {
