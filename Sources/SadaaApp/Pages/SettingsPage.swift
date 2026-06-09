@@ -34,6 +34,7 @@ struct SettingsPage: View {
     @State private var launchAtLogin = false
     @State private var launchError = ""
     @State private var packsError = ""
+    @State private var soundEffects = true
     @State private var micGranted = false
     @State private var axTrusted = false
     @State private var saved = false
@@ -314,6 +315,8 @@ struct SettingsPage: View {
             if !launchError.isEmpty {
                 Text(launchError).font(.caption).foregroundStyle(.red)
             }
+            Toggle("Play a soft chime when dictation starts and stops", isOn: $soundEffects)
+                .tint(Theme.navy)
             Button("Apply") { save() }
                 .buttonStyle(.bordered)
         }
@@ -407,6 +410,7 @@ struct SettingsPage: View {
         transcriptionRate = String(settings.transcriptionRatePerMinute)
         formatterRate = String(settings.formatterRatePer1kChars)
         launchAtLogin = LoginItem.isEnabled
+        soundEffects = settings.soundEffectsEnabled
         refreshPermissions()
     }
 
@@ -425,6 +429,7 @@ struct SettingsPage: View {
             .filter { !$0.isEmpty }
         settings.promptModeDeployment = promptModeDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
+        settings.soundEffectsEnabled = soundEffects
 
         settings.openaiEnabled = openaiEnabled
         settings.openaiModel = openaiModel.trimmingCharacters(in: .whitespacesAndNewlines)

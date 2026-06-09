@@ -22,6 +22,7 @@ import Foundation
         #expect(settings.azureDeployment == "")
         #expect(settings.hotkeyKeycode == 54)      // Right Command
         #expect(settings.voiceEditKeycode == 61)   // Right Option
+        #expect(settings.soundEffectsEnabled == true)
     }
 
     @Test func testPromptModeDefaults() {

@@ -30,6 +30,7 @@ public final class AppSettings {
         static let promptModeDefaultTarget = "promptModeDefaultTarget"
         static let promptModeApps = "promptModeApps"
         static let promptModeDeployment = "promptModeDeployment"
+        static let soundEffectsEnabled = "soundEffectsEnabled"
     }
 
     private let defaults: UserDefaults
@@ -96,6 +97,12 @@ public final class AppSettings {
     public var formattingEnabled: Bool {
         get { defaults.object(forKey: Keys.formattingEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.formattingEnabled) }
+    }
+
+    /// Soft chimes when dictation starts and stops. Default: on.
+    public var soundEffectsEnabled: Bool {
+        get { defaults.object(forKey: Keys.soundEffectsEnabled) as? Bool ?? true }
+        set { defaults.set(newValue, forKey: Keys.soundEffectsEnabled) }
     }
 
     /// Editable speaker-context line fed to the formatter. Spec section 4.

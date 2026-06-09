@@ -12,6 +12,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let settings = AppSettings()
     private let hotkeys = HotkeyManager()
     private let hud = HUDPanel()
+    private let chimes = ChimePlayer()
     private let inserter = TextInserter()
     private let mainWindow = MainWindowController()
     private var viewModel: SadaaViewModel?
@@ -42,6 +43,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        chimes.isEnabled = { [settings] in settings.soundEffectsEnabled }
         setUpStatusItem()
         setUpController()
         requestPermissions()
@@ -492,9 +494,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setIcon("waveform", tint: nil)
             hud.hide(after: 0.4)
         case .recording:
+            chimes.playStart()
             startRecordingTimer()
             setIcon("record.circle.fill", tint: .systemRed)
         case .transcribing:
+            chimes.playStop()
             stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
@@ -515,11 +519,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setIcon("waveform", tint: nil)
             hud.hide(after: 0.4)
         case .recording:
+            chimes.playStart()
             setIcon("pencil", tint: .systemRed)
             // Same ticking timer as dictation: the pill shows the running
             // seconds and the live audio level so you can see it is recording.
             startRecordingTimer()
         case .rewriting:
+            chimes.playStop()
             stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
             hud.show(.transcribing)
