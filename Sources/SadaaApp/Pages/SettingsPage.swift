@@ -16,6 +16,10 @@ struct SettingsPage: View {
     @State private var apiKey = ""
     @State private var formattingEnabled = true
     @State private var gptDeployment = ""
+    @State private var promptModeEnabled = false
+    @State private var promptModeTarget: ModelPackID = .claude
+    @State private var promptModeApps = ""
+    @State private var promptModeDeployment = ""
     @State private var speakerContext = ""
     @State private var openaiEnabled = false
     @State private var openaiModel = ""
@@ -49,6 +53,7 @@ struct SettingsPage: View {
                 hotkeyCard
                 languageCard
                 formattingCard
+                promptModeCard
                 azureCard
                 fallbackCard
                 costCard
@@ -152,6 +157,54 @@ struct SettingsPage: View {
             }
             hint("Hold Shift when you stop to skip formatting for one dictation.")
         }
+    }
+
+    private var promptModeCard: some View {
+        card("Prompt mode") {
+            Toggle("Optimize dictations into prompts in coding apps", isOn: $promptModeEnabled)
+                .tint(Theme.navy)
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Default target model")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+                Picker("", selection: $promptModeTarget) {
+                    ForEach(ModelPackID.allCases, id: \.self) { id in
+                        Text(id.displayName).tag(id)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .labelsHidden()
+            }
+            hint("Say \"this is for GPT\" or \"for Gemini\" at the start or end of a dictation to override the default for that one prompt.")
+            VStack(alignment: .leading, spacing: 5) {
+                Text("Apps (one bundle id per line)")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+                TextEditor(text: $promptModeApps)
+                    .frame(minHeight: 90)
+                    .font(.system(size: 12, design: .monospaced))
+                    .padding(6)
+                    .background(Color.white)
+                    .clipShape(RoundedRectangle(cornerRadius: 6))
+                    .overlay(RoundedRectangle(cornerRadius: 6)
+                        .strokeBorder(Theme.charcoal.opacity(0.2), lineWidth: 1))
+            }
+            hint("Prompt mode only runs in these apps. Everywhere else, dictations use smart formatting.")
+            field("Prompt deployment", "gpt-4o", $promptModeDeployment)
+            hint("Leave empty to use the formatting deployment.")
+            Button("Open packs folder") { openPacksFolder() }
+                .buttonStyle(.bordered)
+            hint("The model packs are editable markdown. Edit a file to change how prompts are written for that model.")
+        }
+    }
+
+    private func openPacksFolder() {
+        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
+                                           in: .userDomainMask)[0]
+            .appendingPathComponent("Sadaa")
+            .appendingPathComponent("ModelPacks")
+        try? ModelPackLibrary.seedOverrides(into: dir)
+        NSWorkspace.shared.open(dir)
     }
 
     private var fallbackCard: some View {
@@ -328,6 +381,10 @@ struct SettingsPage: View {
         apiKey = Keychain.get(account: "azure-openai-key") ?? ""
         formattingEnabled = settings.formattingEnabled
         gptDeployment = settings.gptDeployment
+        promptModeEnabled = settings.promptModeEnabled
+        promptModeTarget = settings.promptModeDefaultTarget
+        promptModeApps = settings.promptModeApps.joined(separator: "\n")
+        promptModeDeployment = settings.promptModeDeployment
         speakerContext = settings.speakerContext
         openaiEnabled = settings.openaiEnabled
         openaiModel = settings.openaiModel
@@ -350,6 +407,13 @@ struct SettingsPage: View {
         saveKey(apiKey, account: "azure-openai-key")
         settings.formattingEnabled = formattingEnabled
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.promptModeEnabled = promptModeEnabled
+        settings.promptModeDefaultTarget = promptModeTarget
+        settings.promptModeApps = promptModeApps
+            .split(whereSeparator: \.isNewline)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+            .filter { !$0.isEmpty }
+        settings.promptModeDeployment = promptModeDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
 
         settings.openaiEnabled = openaiEnabled
