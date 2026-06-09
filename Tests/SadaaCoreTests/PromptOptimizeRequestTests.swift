@@ -40,6 +40,7 @@ import Foundation
     }
 
     @Test func testOptimizeSuccessViaStub() async throws {
+        defer { OptimizeStubURLProtocol.handler = nil }
         OptimizeStubURLProtocol.handler = { request in
             let response = HTTPURLResponse(url: request.url!, statusCode: 200,
                                            httpVersion: nil, headerFields: nil)!

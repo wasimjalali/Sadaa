@@ -33,6 +33,7 @@ struct SettingsPage: View {
     @State private var formatterRate = ""
     @State private var launchAtLogin = false
     @State private var launchError = ""
+    @State private var packsError = ""
     @State private var micGranted = false
     @State private var axTrusted = false
     @State private var saved = false
@@ -194,6 +195,9 @@ struct SettingsPage: View {
             hint("Leave empty to use the formatting deployment.")
             Button("Open packs folder") { openPacksFolder() }
                 .buttonStyle(.bordered)
+            if !packsError.isEmpty {
+                Text(packsError).font(.caption).foregroundStyle(.red)
+            }
             hint("The model packs are editable markdown. Edit a file to change how prompts are written for that model.")
         }
     }
@@ -203,7 +207,13 @@ struct SettingsPage: View {
                                            in: .userDomainMask)[0]
             .appendingPathComponent("Sadaa")
             .appendingPathComponent("ModelPacks")
-        try? ModelPackLibrary.seedOverrides(into: dir)
+        do {
+            try ModelPackLibrary.seedOverrides(into: dir)
+            packsError = ""
+        } catch {
+            packsError = "Couldn't create the packs folder: \(error.localizedDescription)"
+            return
+        }
         NSWorkspace.shared.open(dir)
     }
 
