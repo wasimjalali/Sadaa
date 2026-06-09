@@ -45,6 +45,7 @@ struct HistoryPage: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     viewModel.historyStore.clear()
                     viewModel.refreshRecent()
+                    viewModel.refreshCost()
                 }
             }
             Button("Cancel", role: .cancel) {}
@@ -213,6 +214,7 @@ struct HistoryPage: View {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     viewModel.historyStore.delete(id: record.id)
                     viewModel.refreshRecent()
+                    viewModel.refreshCost()
                 }
             }
         )
@@ -307,6 +309,15 @@ private struct HistoryRow: View {
                 capsule(record.provider, icon: "waveform")
                 if let cost = record.estimatedCost {
                     capsule(PageFormat.dollars(cost), icon: "creditcard")
+                }
+                // Diagnosability: which pipeline produced this text. Prompt Mode
+                // shows its target; Raw flags pure transcription (deliberate or
+                // a formatter fallback). Plain formatted rows stay uncluttered.
+                if record.mode == .prompt {
+                    capsule("Prompt → \(record.promptTarget ?? "?")",
+                            icon: "wand.and.stars")
+                } else if record.mode == .raw {
+                    capsule("Raw", icon: "doc.plaintext")
                 }
             }
         }

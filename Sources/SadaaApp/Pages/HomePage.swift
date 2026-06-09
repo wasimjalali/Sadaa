@@ -311,7 +311,7 @@ private struct RecentRow: View {
         )
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Theme.gold.opacity(hovering ? 0.32 : 0.18), lineWidth: 1)
+                .strokeBorder(Theme.gold.opacity(hovering ? 0.4 : 0.18), lineWidth: 1)
         )
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
         .onHover { hovering = $0 }

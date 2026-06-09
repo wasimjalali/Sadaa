@@ -110,7 +110,10 @@ struct DictionaryPage: View {
 
             addField
 
-            if viewModel.dictionaryEntries.count > 15 {
+            // Keep the field visible while a filter is active, even if deletes
+            // drop the word count below the threshold; otherwise the filter
+            // would keep hiding words with no control left to clear it.
+            if viewModel.dictionaryEntries.count > 15 || !search.isEmpty {
                 searchField
             }
 
@@ -475,7 +478,7 @@ private struct EntryRow: View {
         .clipShape(RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 10)
-                .stroke(Theme.gold.opacity(hovering ? 0.25 : 0), lineWidth: 1)
+                .strokeBorder(Theme.gold.opacity(hovering ? 0.4 : 0.18), lineWidth: 1)
         )
         .onHover { hovering = $0 }
         .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)

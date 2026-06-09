@@ -199,6 +199,12 @@ struct SettingsPage: View {
         card("Smart formatting", icon: "wand.and.stars") {
             Toggle("Format dictations with GPT", isOn: $formattingEnabled)
                 .tint(Theme.navy)
+                // Write through immediately, same as the menu-bar toggle. Save
+                // must not write this back, or a menu toggle made while this
+                // page sits open would be silently reverted.
+                .onChange(of: formattingEnabled) { _, isOn in
+                    settings.formattingEnabled = isOn
+                }
             field("GPT deployment", "gpt-4o-mini", $gptDeployment)
             VStack(alignment: .leading, spacing: 5) {
                 Text("Speaker context")
@@ -221,6 +227,10 @@ struct SettingsPage: View {
         card("Prompt mode", icon: "wand.and.stars") {
             Toggle("Optimize dictations into prompts in coding apps", isOn: $promptModeEnabled)
                 .tint(Theme.navy)
+                // Write through immediately; see the formatting toggle above.
+                .onChange(of: promptModeEnabled) { _, isOn in
+                    settings.promptModeEnabled = isOn
+                }
             VStack(alignment: .leading, spacing: 5) {
                 Text("Default target model")
                     .font(.system(size: 12, weight: .medium))
@@ -460,11 +470,14 @@ struct SettingsPage: View {
     private func save() {
         settings.azureEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.azureDeployment = deployment.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.azureAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        // A blank API version would persist an empty string and break every
+        // request; keep the stored value instead (the field re-syncs below).
+        let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedAPIVersion.isEmpty { settings.azureAPIVersion = trimmedAPIVersion }
         saveKey(apiKey, account: "azure-openai-key")
-        settings.formattingEnabled = formattingEnabled
+        // formattingEnabled / promptModeEnabled write through from their
+        // toggles, so a menu-bar toggle made while this page is open survives.
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.promptModeEnabled = promptModeEnabled
         settings.promptModeDefaultTarget = promptModeTarget
         settings.promptModeApps = promptModeApps
             .split(whereSeparator: \.isNewline)
@@ -475,7 +488,9 @@ struct SettingsPage: View {
         settings.soundEffectsEnabled = soundEffects
 
         settings.openaiEnabled = openaiEnabled
-        settings.openaiModel = openaiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        // Same guard as the Azure fields: never persist an empty model.
+        let trimmedOpenAIModel = openaiModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedOpenAIModel.isEmpty { settings.openaiModel = trimmedOpenAIModel }
         saveKey(openaiKey, account: "openai-key")
         settings.maiEnabled = maiEnabled
         settings.maiEndpoint = maiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -508,6 +523,11 @@ struct SettingsPage: View {
             launchError = "Couldn't update login item: \(error.localizedDescription)"
             launchAtLogin = LoginItem.isEnabled
         }
+
+        // Re-sync every field from what was actually stored, so a blanked
+        // box whose old value was kept (API version, models, rates) shows
+        // that value again instead of sitting empty under a green Saved badge.
+        load()
 
         viewModel.refreshConfig()
         viewModel.refreshCost()
