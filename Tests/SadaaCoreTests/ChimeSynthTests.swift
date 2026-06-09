@@ -11,10 +11,10 @@ import Foundation
     }
 
     @Test func testChimeIsGentleAndClickFree() {
-        let samples = ChimeSynth.chime(frequencies: [523.25, 783.99])
+        let samples = ChimeSynth.chime(frequencies: [523.25, 659.26])
         let peak = samples.map { abs(Int($0)) }.max() ?? 0
-        #expect(peak > 1_500)    // audible
-        #expect(peak < 16_500)   // gentle, stays around half scale
+        #expect(peak > 800)      // audible
+        #expect(peak < 9_000)    // soothing, stays around quarter scale
         #expect(abs(Int(samples.first ?? 32_767)) < 350)   // no click in
         #expect(abs(Int(samples.last ?? 32_767)) < 350)    // no click out
     }
