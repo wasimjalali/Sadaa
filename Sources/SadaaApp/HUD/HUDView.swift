@@ -1,6 +1,9 @@
 import SwiftUI
 import SadaaCore
 
+/// Display-only state for the HUD pill. Richer than DictationState on purpose
+/// (recording carries seconds and level, optimizing exists only here), so new
+/// cases land here, not in the controller state machines.
 enum HUDDisplay: Equatable {
     case recording(seconds: Int, level: Float)
     case transcribing
