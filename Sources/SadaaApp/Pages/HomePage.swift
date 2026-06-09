@@ -82,7 +82,7 @@ struct HomePage: View {
     private var stateText: String {
         switch viewModel.dictationState {
         case .idle: return "Tap your hotkey or click to dictate"
-        case .recording: return "Listening..."
+        case .recording: return "Listening... Esc cancels"
         case .transcribing: return "Transcribing..."
         case .delivering: return "Inserting..."
         case .error(let message): return message
