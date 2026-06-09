@@ -24,6 +24,14 @@ import Foundation
         #expect(settings.voiceEditKeycode == 61)   // Right Option
     }
 
+    @Test func testPromptModeDefaults() {
+        #expect(settings.promptModeEnabled == false)
+        #expect(settings.promptModeDefaultTarget == .claude)
+        #expect(settings.promptModeApps == FormattingProfiles.code.bundleIDs
+            + ["com.anthropic.claudefordesktop", "com.openai.chat"])
+        #expect(settings.promptModeDeployment == "")
+    }
+
     @Test func testRoundTrip() {
         settings.azureEndpoint = "https://myres.openai.azure.com"
         settings.azureDeployment = "whisper"

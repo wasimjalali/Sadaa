@@ -26,6 +26,10 @@ public final class AppSettings {
         static let maiModel = "maiModel"
         static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
         static let formatterRatePer1kChars = "formatterRatePer1kChars"
+        static let promptModeEnabled = "promptModeEnabled"
+        static let promptModeDefaultTarget = "promptModeDefaultTarget"
+        static let promptModeApps = "promptModeApps"
+        static let promptModeDeployment = "promptModeDeployment"
     }
 
     private let defaults: UserDefaults
@@ -147,5 +151,35 @@ public final class AppSettings {
     public var formatterRatePer1kChars: Double {
         get { defaults.object(forKey: Keys.formatterRatePer1kChars) as? Double ?? 0.002 }
         set { defaults.set(newValue, forKey: Keys.formatterRatePer1kChars) }
+    }
+
+    // MARK: - Prompt Mode
+
+    /// Rewrite dictations into optimized prompts in the listed apps. Off by
+    /// default so smart formatting stays the standard behavior.
+    public var promptModeEnabled: Bool {
+        get { defaults.bool(forKey: Keys.promptModeEnabled) }
+        set { defaults.set(newValue, forKey: Keys.promptModeEnabled) }
+    }
+
+    /// The model family used when the speaker did not name one out loud.
+    public var promptModeDefaultTarget: ModelPackID {
+        get { ModelPackID(rawValue: defaults.string(forKey: Keys.promptModeDefaultTarget) ?? "") ?? .claude }
+        set { defaults.set(newValue.rawValue, forKey: Keys.promptModeDefaultTarget) }
+    }
+
+    /// Bundle ids where Prompt Mode applies. Defaults to the code/terminal apps
+    /// plus the Claude and ChatGPT desktop apps.
+    public var promptModeApps: [String] {
+        get { defaults.stringArray(forKey: Keys.promptModeApps)
+            ?? FormattingProfiles.code.bundleIDs
+            + ["com.anthropic.claudefordesktop", "com.openai.chat"] }
+        set { defaults.set(newValue, forKey: Keys.promptModeApps) }
+    }
+
+    /// Chat deployment for Prompt Mode. Empty means reuse the formatting one.
+    public var promptModeDeployment: String {
+        get { defaults.string(forKey: Keys.promptModeDeployment) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.promptModeDeployment) }
     }
 }
