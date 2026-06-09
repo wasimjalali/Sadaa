@@ -8,6 +8,7 @@ import SadaaCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var formattingMenuItem: NSMenuItem?
+    private var promptModeMenuItem: NSMenuItem?
     private let settings = AppSettings()
     private let hotkeys = HotkeyManager()
     private let hud = HUDPanel()
@@ -125,10 +126,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.viewModel?.refreshRecent()
                 self.viewModel?.refreshCost()
             },
-            format: { [settings] raw, ctx in
+            format: { [weak self, settings] raw, ctx in
                 // Rebuilt per dictation so toggling formatting or editing the
                 // GPT deployment applies immediately, with no relaunch. When
                 // unconfigured we hand back the raw text unchanged.
+                // Prompt Mode: in the listed coding and chatbot apps, rewrite
+                // the dictation into an optimized prompt for the target model
+                // instead of just cleaning it up. The target can be named by
+                // voice; otherwise the app implies it (Claude desktop means
+                // Claude, ChatGPT means GPT) and the settings default is the
+                // final fallback.
+                if settings.promptModeEnabled,
+                   let bundle = ctx.appBundleID,
+                   settings.promptModeApps.contains(bundle),
+                   let formatter = Self.buildPromptModeFormatter(settings: settings) {
+                    let target = ModelPackResolver.resolve(
+                        transcript: raw,
+                        defaultTarget: ModelPackResolver.appImpliedTarget(bundleID: bundle)
+                            ?? settings.promptModeDefaultTarget)
+                    let pack = ModelPackLibrary.pack(
+                        for: target, overridesDirectory: Self.modelPacksDirectory())
+                    await MainActor.run { self?.hud.show(.optimizing(target: target.displayName)) }
+                    return try await formatter.optimize(
+                        rawTranscript: raw, context: ctx, pack: pack)
+                }
                 guard let formatter = Self.buildFormatter(settings: settings) else {
                     return FormattingResult(text: raw, newTerms: [])
                 }
@@ -347,6 +368,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         return AzureChatFormatter(config: config)
     }
 
+    /// Builds the Prompt Mode formatter. Same Azure config as buildFormatter but
+    /// uses the Prompt Mode deployment when set, falling back to the formatting
+    /// deployment when it is empty. Returns nil when Azure is unconfigured.
+    private static func buildPromptModeFormatter(settings: AppSettings) -> AzureChatFormatter? {
+        let deployment = settings.promptModeDeployment.isEmpty
+            ? settings.gptDeployment : settings.promptModeDeployment
+        guard !deployment.isEmpty,
+              let endpoint = URL(string: settings.azureEndpoint),
+              !settings.azureEndpoint.isEmpty,
+              let key = Keychain.get(account: "azure-openai-key")
+        else { return nil }
+        let config = AzureChatFormatter.Config(
+            endpoint: endpoint, apiKey: key,
+            deployment: deployment,
+            apiVersion: settings.azureAPIVersion)
+        return AzureChatFormatter(config: config)
+    }
+
+    /// Where user-overridable model packs live: <Application Support>/Sadaa/ModelPacks.
+    private static func modelPacksDirectory() -> URL {
+        FileManager.default.urls(for: .applicationSupportDirectory,
+                                 in: .userDomainMask)[0]
+            .appendingPathComponent("Sadaa")
+            .appendingPathComponent("ModelPacks")
+    }
+
     private func startHotkeys() {
         hotkeys.activationKeycode = Int64(settings.hotkeyKeycode)
         hotkeys.voiceEditKeycode = Int64(settings.voiceEditKeycode)
@@ -558,6 +605,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(formattingItem)
         formattingMenuItem = formattingItem
 
+        // Prompt mode: in coding apps, rewrite the dictation into an optimized
+        // prompt for the target model instead of just cleaning it up.
+        let promptModeItem = NSMenuItem(title: "Prompt mode",
+                                        action: #selector(togglePromptMode),
+                                        keyEquivalent: "")
+        promptModeItem.target = self
+        promptModeItem.state = settings.promptModeEnabled ? .on : .off
+        menu.addItem(promptModeItem)
+        promptModeMenuItem = promptModeItem
+
         let settingsItem = NSMenuItem(title: "Settings…",
                                       action: #selector(openMainWindow),
                                       keyEquivalent: ",")
@@ -576,6 +633,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// change made on the Settings page is reflected here too.
     func menuWillOpen(_ menu: NSMenu) {
         formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
+        promptModeMenuItem?.state = settings.promptModeEnabled ? .on : .off
     }
 
     @objc private func menuToggle() {
@@ -587,6 +645,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         // Takes effect on the next dictation (the formatter is built per use).
         settings.formattingEnabled.toggle()
         formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
+    }
+
+    @objc private func togglePromptMode() {
+        // Takes effect on the next dictation (the formatter is built per use).
+        settings.promptModeEnabled.toggle()
+        promptModeMenuItem?.state = settings.promptModeEnabled ? .on : .off
     }
 
     @objc private func setLanguage(_ sender: NSMenuItem) {
