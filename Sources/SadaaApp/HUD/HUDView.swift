@@ -100,36 +100,60 @@ struct SadaaWaveBars: View {
     }
 
     var body: some View {
+        switch style {
+        case .still:
+            bars { fraction(at: $0, level: 0, phase: 0, animated: false) }
+        case .live(let level):
+            if reduceMotion {
+                // Reduced motion: follow loudness only, no ripple, gentle ease.
+                bars { fraction(at: $0, level: level, phase: 0, animated: false) }
+                    .animation(.easeOut(duration: 0.12), value: level)
+            } else {
+                // A continuous time source so the bars ripple EVERY frame, not
+                // only when a new level sample arrives (~10-30Hz). The mic level
+                // sets the wave's amplitude; time gives it the flow. This is what
+                // makes the mark read as a live waveform instead of a slow pulse.
+                TimelineView(.animation) { timeline in
+                    let phase = timeline.date.timeIntervalSinceReferenceDate
+                    bars { fraction(at: $0, level: level, phase: phase, animated: true) }
+                }
+            }
+        }
+    }
+
+    private func bars(_ heightFraction: @escaping (Int) -> CGFloat) -> some View {
         HStack(spacing: spacing) {
             ForEach(weights.indices, id: \.self) { index in
                 Capsule()
                     .fill(gold)
-                    .frame(width: barWidth, height: height(at: index))
+                    .frame(width: barWidth, height: pixels(heightFraction(index)))
             }
         }
         .frame(height: barHeight, alignment: .center)
-        .animation(reduceMotion ? nil : .easeOut(duration: 0.12), value: levelKey)
     }
 
-    /// Drives the level animation; constant for `.still` so it never animates.
-    private var levelKey: Float {
-        if case .live(let level) = style { return level }
-        return -1
-    }
-
-    private func height(at index: Int) -> CGFloat {
+    /// Maps a 0...1 fraction of full height to pixels, never below the floor so
+    /// the mark never collapses to a flat line.
+    private func pixels(_ fraction: CGFloat) -> CGFloat {
         let floor = barHeight * floorRatio
         let span = barHeight - floor
-        let fraction: CGFloat
-        switch style {
-        case .still:
-            fraction = weights[index] * restRatio
-        case .live(let level):
-            let norm = min(max(CGFloat(level) * gain, 0), 1)
-            // Scale from the resting mountain (silence) up to full height (loud).
-            let scale = restRatio + (1 - restRatio) * norm
-            fraction = weights[index] * scale
-        }
         return floor + span * min(max(fraction, 0), 1)
+    }
+
+    /// Height fraction (0...1) for one bar. The bar sits on the logo's resting
+    /// mountain, rises with loudness, and ripples with a per-bar phase offset so
+    /// the five bars travel as a wave instead of pulsing in lockstep. The ripple
+    /// is barely there in silence and grows with the mic level; the wave also
+    /// speeds up as you get louder, for an energetic, realistic feel.
+    private func fraction(at index: Int, level: Float,
+                          phase: Double, animated: Bool) -> CGFloat {
+        let norm = min(max(CGFloat(level) * gain, 0), 1)
+        let base = weights[index] * (restRatio + (1 - restRatio) * norm)
+        guard animated else { return base }
+        let speed = 7.0 + 7.0 * Double(norm)          // quiet = calm, loud = lively
+        let offset = Double(index) * 0.9              // staggers the bars into a wave
+        let ripple = sin(phase * speed + offset)      // -1...1
+        let amplitude = 0.05 + 0.25 * norm            // gentle idle, strong on sound
+        return base + CGFloat(ripple) * amplitude * weights[index]
     }
 }

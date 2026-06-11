@@ -23,6 +23,7 @@ public enum FormattingProfiles {
             "com.apple.Terminal",
             "dev.warp.Warp-Stable",
             "com.googlecode.iterm2",
+            "com.wasimjalali.bunyan",        // Bunyan (personal terminal)
         ],
         promptFragment: "The target app is a code editor or terminal. Keep technical terms, identifiers, camelCase and snake_case exactly. No greetings, no filler, no sign-offs. Plain imperative sentences.")
 

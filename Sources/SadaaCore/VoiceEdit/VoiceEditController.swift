@@ -44,7 +44,12 @@ public final class VoiceEditController {
         self.rewrite = rewrite
         self.replace = replace
         self.recorder.onAutoStop = { [weak self] in
-            DispatchQueue.main.async { self?.toggle() }
+            DispatchQueue.main.async {
+                // Only auto-stop the recording we own; a late auto-stop after a
+                // manual stop already advanced the state must not re-toggle.
+                guard self?.state == .recording else { return }
+                self?.toggle()
+            }
         }
     }
 
@@ -111,13 +116,24 @@ public final class VoiceEditController {
         }
 
         var instruction: Transcript?
+        var lastError: Error?
         for provider in chain {
-            if let result = try? await provider.transcribe(audio: audioURL, hint: hint()) {
-                instruction = result
+            do {
+                instruction = try await provider.transcribe(audio: audioURL, hint: hint())
                 break
+            } catch {
+                lastError = error
             }
         }
-        guard let instruction, !instruction.text.isEmpty else {
+        // Fail loud: a 401, timeout or network drop must not masquerade as
+        // silence. Only a successful-but-empty transcript is "couldn't hear it".
+        guard let instruction else {
+            let detail = (lastError as? ProviderError).map(Self.describe)
+                ?? lastError?.localizedDescription ?? "unknown error"
+            state = .error("Transcription failed: \(detail)")
+            return
+        }
+        guard !instruction.text.isEmpty else {
             state = .error("Couldn't hear the instruction.")
             return
         }
@@ -129,6 +145,22 @@ public final class VoiceEditController {
             state = .idle
         } catch {
             state = .error("Edit failed. Your text was not changed.")
+        }
+    }
+
+    private static func describe(_ error: ProviderError) -> String {
+        switch error {
+        case .http(let status, let body):
+            // Surface the provider's own error text so a genuine failure is
+            // distinguishable from an opaque "HTTP 400" (matches the dictation
+            // path).
+            let detail = body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)
+            return detail.isEmpty ? "HTTP \(status) from provider"
+                                  : "HTTP \(status): \(detail)"
+        case .badResponse: return "unreadable provider response"
+        case .notConfigured(let what): return what
+        case .timedOut: return "timed out"
+        case .transport(let urlError): return urlError.localizedDescription
         }
     }
 }

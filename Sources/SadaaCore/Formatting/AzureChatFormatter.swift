@@ -257,7 +257,8 @@ public final class AzureChatFormatter: @unchecked Sendable {
         }
 
         struct Inner: Decodable { let text: String; let newTerms: [String]? }
-        if let inner = try? JSONDecoder().decode(Inner.self, from: Data(content.utf8)) {
+        if let inner = try? JSONDecoder().decode(
+            Inner.self, from: Data(Self.stripCodeFence(content).utf8)) {
             let terms = Array((inner.newTerms ?? []).prefix(3))
             let text = inner.text.trimmingCharacters(in: .whitespacesAndNewlines)
             return FormattingResult(text: text.isEmpty ? fallbackRaw : text,
@@ -288,12 +289,28 @@ public final class AzureChatFormatter: @unchecked Sendable {
         }
 
         struct Inner: Decodable { let text: String; let newTerms: [String]? }
-        guard let inner = try? JSONDecoder().decode(Inner.self, from: Data(content.utf8)) else {
+        guard let inner = try? JSONDecoder().decode(
+            Inner.self, from: Data(stripCodeFence(content).utf8)) else {
             throw ProviderError.badResponse
         }
         let text = inner.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else { throw ProviderError.badResponse }
         return FormattingResult(text: text,
                                 newTerms: Array((inner.newTerms ?? []).prefix(3)))
+    }
+
+    /// Strips a wrapping markdown code fence (```json … ``` or ``` … ```) when
+    /// the model adds one despite being told not to, so strict JSON decoding
+    /// still succeeds. Returns the content unchanged when there is no fence.
+    static func stripCodeFence(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard trimmed.hasPrefix("```"), trimmed.hasSuffix("```"),
+              let firstNewline = trimmed.firstIndex(of: "\n") else { return content }
+        let afterOpening = trimmed[trimmed.index(after: firstNewline)...]
+        guard let closingFence = afterOpening.range(of: "```", options: .backwards) else {
+            return content
+        }
+        return afterOpening[..<closingFence.lowerBound]
+            .trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }

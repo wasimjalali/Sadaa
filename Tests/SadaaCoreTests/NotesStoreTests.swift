@@ -37,6 +37,33 @@ import Foundation
         #expect(store.all().isEmpty)
     }
 
+    @Test func testUpdateChangesTextKeepsPositionAndTimestamp() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = NotesStore(fileURL: url)
+        store.add(text: "first", createdAt: Date(timeIntervalSince1970: 1))
+        let second = store.add(text: "second", createdAt: Date(timeIntervalSince1970: 2))!
+        store.update(id: second.id, text: "second edited")
+
+        let edited = store.all().first { $0.id == second.id }
+        #expect(edited?.text == "second edited")
+        #expect(edited?.createdAt == Date(timeIntervalSince1970: 2))
+        // Newest-first order is preserved; the edited note stays on top.
+        #expect(store.all().map(\.text) == ["second edited", "first"])
+
+        let reopened = NotesStore(fileURL: url)
+        #expect(reopened.all().first { $0.id == second.id }?.text == "second edited")
+    }
+
+    @Test func testUpdateIgnoresBlank() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = NotesStore(fileURL: url)
+        let note = store.add(text: "keep me", createdAt: Date())!
+        store.update(id: note.id, text: "   ")
+        #expect(store.all().first?.text == "keep me")
+    }
+
     @Test func testCorruptRecoversWithBackup() throws {
         let url = tempFile()
         defer {

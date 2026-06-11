@@ -23,7 +23,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: DictationController?
     private var voiceEditController: VoiceEditController?
     private var recordingTimer: Timer?
-    private var recordingSeconds = 0
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
     /// A fallback notice (formatter offline, optimizer failed) to surface once
@@ -168,12 +167,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                                   dictionaryWords: dictionary.biasList(budget: 50))
             },
             recordingsToKeep: settings.recordingsToKeep,
-            deliver: { [weak self] text in
+            deliver: { [weak self] text, done in
                 self?.inserter.deliver(text) { outcome in
                     if outcome == .clipboardOnly {
                         self?.hud.show(.error("Copied. Press Cmd-V to paste."))
                         self?.hud.hide(after: 4)
                     }
+                    done()
                 }
             },
             record: { [weak self] record in
@@ -199,29 +199,44 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 // final fallback. Smart formatting stays the master switch:
                 // when it's off, no GPT touches the dictation, Prompt Mode
                 // included, exactly as the menu copy promises.
-                if settings.formattingEnabled,
-                   settings.promptModeEnabled,
+                // Prompt Mode is enabled and the frontmost app is a target. Smart
+                // formatting stays the master switch (no GPT runs when it's off),
+                // but when Prompt Mode is on yet can't run we now say WHY instead
+                // of silently delivering raw text - the old behavior read as
+                // "prompt mode just doesn't work".
+                if settings.promptModeEnabled,
                    let bundle = ctx.appBundleID,
-                   settings.promptModeApps.contains(bundle),
-                   let formatter = Self.buildPromptModeFormatter(settings: settings) {
-                    let target = ModelPackResolver.resolve(
-                        transcript: raw,
-                        defaultTarget: ModelPackResolver.appImpliedTarget(bundleID: bundle)
-                            ?? settings.promptModeDefaultTarget)
-                    let pack = ModelPackLibrary.pack(
-                        for: target, overridesDirectory: Self.modelPacksDirectory())
-                    await MainActor.run { self?.hud.show(.optimizing(target: target.displayName)) }
-                    do {
-                        return try await formatter.optimize(
-                            rawTranscript: raw, context: ctx, pack: pack)
-                    } catch {
-                        // Optimizer failure means raw text, with its own notice:
-                        // "formatter offline" here would misdirect any debugging.
+                   settings.promptModeApps.contains(bundle) {
+                    if !settings.formattingEnabled {
                         await MainActor.run {
                             self?.pendingDeliveryNotice =
-                                "Inserted raw text (prompt optimizer failed)."
+                                "Prompt mode needs Smart formatting on."
                         }
-                        return FormattingResult(text: raw, newTerms: [], mode: .raw)
+                    } else if let formatter = Self.buildPromptModeFormatter(settings: settings) {
+                        let target = ModelPackResolver.resolve(
+                            transcript: raw,
+                            defaultTarget: ModelPackResolver.appImpliedTarget(bundleID: bundle)
+                                ?? settings.promptModeDefaultTarget)
+                        let pack = ModelPackLibrary.pack(
+                            for: target, overridesDirectory: Self.modelPacksDirectory())
+                        await MainActor.run { self?.hud.show(.optimizing(target: target.displayName)) }
+                        do {
+                            return try await formatter.optimize(
+                                rawTranscript: raw, context: ctx, pack: pack)
+                        } catch {
+                            // Optimizer failure means raw text, with its own notice:
+                            // "formatter offline" here would misdirect any debugging.
+                            await MainActor.run {
+                                self?.pendingDeliveryNotice =
+                                    "Inserted raw text (prompt optimizer failed)."
+                            }
+                            return FormattingResult(text: raw, newTerms: [], mode: .raw)
+                        }
+                    } else {
+                        await MainActor.run {
+                            self?.pendingDeliveryNotice =
+                                "Prompt mode needs a GPT deployment in Settings."
+                        }
                     }
                 }
                 guard let formatter = Self.buildFormatter(settings: settings) else {
@@ -622,15 +637,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startRecordingTimer() {
-        recordingSeconds = 0
         hud.show(.recording(seconds: 0, level: 0))
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 0.1,
+        // Push the live mic level at ~30Hz so the wave's amplitude tracks speech
+        // promptly (the bars ripple continuously on their own via TimelineView;
+        // this keeps the loudness envelope responsive). The seconds field is no
+        // longer shown in the recording pill, so it stays 0.
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
                                               repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.recordingSeconds += 1
-                self.hud.show(.recording(seconds: self.recordingSeconds / 10,
-                                         level: self.currentLevel))
+                self.hud.show(.recording(seconds: 0, level: self.currentLevel))
             }
         }
     }

@@ -22,7 +22,11 @@ public final class DictationController {
     private let store: RecordingStore
     private let hint: () -> TranscriptionHint
     private let recordingsToKeep: Int
-    private let deliver: (String) -> Void
+    /// Delivers the final text and calls the completion once delivery has fully
+    /// settled (paste verified, clipboard restored). The controller stays in
+    /// .delivering until then, so the busy mutex covers the whole delivery
+    /// window and a re-entrant tap can't start a new recording mid-paste.
+    private let deliver: (String, @escaping () -> Void) -> Void
     private let record: (DictationRecord) -> Void
     private let format: ((String, FormattingContext) async throws -> FormattingResult)?
     private let context: () -> FormattingContext
@@ -50,7 +54,7 @@ public final class DictationController {
                 store: RecordingStore,
                 hint: @escaping () -> TranscriptionHint,
                 recordingsToKeep: Int,
-                deliver: @escaping (String) -> Void,
+                deliver: @escaping (String, @escaping () -> Void) -> Void,
                 record: @escaping (DictationRecord) -> Void = { _ in },
                 format: ((String, FormattingContext) async throws -> FormattingResult)? = nil,
                 context: @escaping () -> FormattingContext = {
@@ -77,7 +81,13 @@ public final class DictationController {
         self.now = now
         self.isSecureInputActive = isSecureInputActive
         self.recorder.onAutoStop = { [weak self] in
-            DispatchQueue.main.async { self?.toggle() }
+            DispatchQueue.main.async {
+                // Only the recording we own may be auto-stopped. A late auto-stop
+                // dispatched after a manual stop already advanced the state must
+                // not toggle (worst case, start a fresh recording from .idle).
+                guard self?.state == .recording else { return }
+                self?.toggle()
+            }
         }
     }
 
@@ -176,6 +186,19 @@ public final class DictationController {
             return
         }
 
+        // A header-only or near-empty WAV (an instant tap, a denied mic, a capture
+        // race) is rejected by the provider with a 400 that reads as a mysterious
+        // provider error. Catch it before the upload and the bill, and say so
+        // plainly. 16kHz mono 16-bit: ~100ms of audio is 3200 bytes on top of the
+        // 44-byte header.
+        let attrs = try? FileManager.default.attributesOfItem(atPath: audioURL.path)
+        let audioBytes = (attrs?[.size] as? Int) ?? 0
+        guard audioBytes >= 44 + 3200 else {
+            try? store.prune(keep: recordingsToKeep)
+            state = .error("Recording was too short.")
+            return
+        }
+
         var transcript: Transcript?
         var usedProvider: String?
         var usedFromFallback = false
@@ -244,16 +267,28 @@ public final class DictationController {
             promptTarget: promptTarget))
 
         state = .delivering
-        deliver(finalText)
         try? store.prune(keep: recordingsToKeep)
-        state = .idle
-        // Tell the user their primary was down and a fallback served them.
-        if usedFromFallback, let usedProvider { servedByFallback(usedProvider) }
+        // Hold .delivering until delivery actually settles; the busy mutex then
+        // spans the whole paste/verify/restore window instead of dropping to
+        // .idle the instant the synthetic paste is posted.
+        deliver(finalText) { [weak self] in
+            guard let self else { return }
+            self.state = .idle
+            // Tell the user their primary was down and a fallback served them.
+            if usedFromFallback, let usedProvider { self.servedByFallback(usedProvider) }
+        }
     }
 
     private static func describe(_ error: ProviderError) -> String {
         switch error {
-        case .http(let status, _): return "HTTP \(status) from provider"
+        case .http(let status, let body):
+            // Surface the provider's own error text so a genuine failure (e.g.
+            // 429 insufficient_quota, 400 "audio file is too short") is
+            // distinguishable from an opaque "HTTP 400". Without this, every
+            // cause collapsed to the same message and couldn't be diagnosed.
+            let detail = body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)
+            return detail.isEmpty ? "HTTP \(status) from provider"
+                                  : "HTTP \(status): \(detail)"
         case .badResponse: return "unreadable provider response"
         case .notConfigured(let what): return what
         case .timedOut: return "timed out"

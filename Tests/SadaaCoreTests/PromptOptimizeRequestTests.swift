@@ -55,6 +55,36 @@ import Foundation
             pack: ModelPackLibrary.pack(for: .claude))
         #expect(result.text == "Fix the logout bug.")
     }
+
+    @Test func testOptimizeAcceptsMarkdownFencedJSON() async throws {
+        // Some models wrap the JSON in a ```json fence despite being told not to.
+        // The optimizer must still parse it instead of falling back to raw text.
+        defer { OptimizeStubURLProtocol.handler = nil }
+        OptimizeStubURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let fenced = "```json\n{\"text\":\"Fix the logout bug.\",\"newTerms\":[]}\n```"
+            // Build the body via a dictionary so the fenced content is escaped
+            // correctly into the assistant message.
+            let payload: [String: Any] = ["choices": [["message": ["content": fenced]]]]
+            let data = try JSONSerialization.data(withJSONObject: payload)
+            return (response, data)
+        }
+        let formatter = AzureChatFormatter(config: config,
+                                           session: OptimizeStubURLProtocol.session())
+        let result = try await formatter.optimize(
+            rawTranscript: "fix the logout thing",
+            context: context(),
+            pack: ModelPackLibrary.pack(for: .claude))
+        #expect(result.text == "Fix the logout bug.")
+    }
+
+    @Test func testStripCodeFenceLeavesPlainJSONUntouched() {
+        let plain = "{\"text\":\"hi\",\"newTerms\":[]}"
+        #expect(AzureChatFormatter.stripCodeFence(plain) == plain)
+        let fenced = "```json\n{\"text\":\"hi\"}\n```"
+        #expect(AzureChatFormatter.stripCodeFence(fenced) == "{\"text\":\"hi\"}")
+    }
 }
 
 /// Isolated URLProtocol stub for PromptOptimizeRequestTests. Uses a separate

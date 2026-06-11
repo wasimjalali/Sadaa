@@ -175,12 +175,35 @@ public final class AppSettings {
         set { defaults.set(newValue.rawValue, forKey: Keys.promptModeDefaultTarget) }
     }
 
-    /// Bundle ids where Prompt Mode applies. Defaults to the code/terminal apps
-    /// plus the Claude and ChatGPT desktop apps.
+    /// Bundle ids where Prompt Mode applies by default: the code/terminal apps,
+    /// the popular non-Apple terminals, the Claude and ChatGPT desktop apps, and
+    /// the major browsers, so browser-based chatbots (ChatGPT, Claude, Gemini in
+    /// the browser) get optimized prompts too. Listed only here, never added to
+    /// FormattingProfiles.code.bundleIDs, so browsers don't inherit the code
+    /// formatting profile. Editable in Settings.
+    public static let defaultPromptModeApps: [String] =
+        FormattingProfiles.code.bundleIDs + [
+            // Other common terminals
+            "com.mitchellh.ghostty",        // Ghostty
+            "net.kovidgoyal.kitty",         // kitty
+            "org.alacritty",                // Alacritty
+            "com.github.wez.wezterm",       // WezTerm
+            "co.zeit.hyper",                // Hyper
+            // Chatbot desktop apps
+            "com.anthropic.claudefordesktop",
+            "com.openai.chat",
+            // Browsers (browser-based chatbots)
+            "com.apple.Safari",
+            "com.google.Chrome",
+            "company.thebrowser.Browser",   // Arc
+            "com.microsoft.edgemac",
+            "com.brave.Browser",
+            "org.mozilla.firefox",
+        ]
+
+    /// Bundle ids where Prompt Mode applies. Defaults to `defaultPromptModeApps`.
     public var promptModeApps: [String] {
-        get { defaults.stringArray(forKey: Keys.promptModeApps)
-            ?? FormattingProfiles.code.bundleIDs
-            + ["com.anthropic.claudefordesktop", "com.openai.chat"] }
+        get { defaults.stringArray(forKey: Keys.promptModeApps) ?? Self.defaultPromptModeApps }
         set { defaults.set(newValue, forKey: Keys.promptModeApps) }
     }
 

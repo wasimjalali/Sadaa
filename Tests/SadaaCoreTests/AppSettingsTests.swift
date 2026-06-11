@@ -28,8 +28,15 @@ import Foundation
     @Test func testPromptModeDefaults() {
         #expect(settings.promptModeEnabled == false)
         #expect(settings.promptModeDefaultTarget == .claude)
-        #expect(settings.promptModeApps == FormattingProfiles.code.bundleIDs
-            + ["com.anthropic.claudefordesktop", "com.openai.chat"])
+        #expect(settings.promptModeApps == AppSettings.defaultPromptModeApps)
+        // The code/terminal apps, the chatbot desktop apps and the browsers are
+        // all covered out of the box.
+        #expect(settings.promptModeApps.contains("com.apple.Terminal"))
+        #expect(settings.promptModeApps.contains("com.mitchellh.ghostty"))
+        #expect(settings.promptModeApps.contains("com.anthropic.claudefordesktop"))
+        #expect(settings.promptModeApps.contains("com.apple.Safari"))
+        #expect(settings.promptModeApps.contains("com.google.Chrome"))
+        #expect(settings.promptModeApps.contains("com.wasimjalali.bunyan"))  // personal terminal
         #expect(settings.promptModeDeployment == "")
     }
 

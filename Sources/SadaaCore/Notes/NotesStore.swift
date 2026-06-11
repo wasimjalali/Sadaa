@@ -38,6 +38,16 @@ public final class NotesStore {
         save()
     }
 
+    /// Replaces a note's text in place, keeping its id, createdAt and position.
+    /// Blank text is rejected (same rule as `add`) so an edit can't empty a note.
+    public func update(id: UUID, text: String) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              let idx = notes.firstIndex(where: { $0.id == id }) else { return }
+        notes[idx].text = trimmed
+        save()
+    }
+
     private func save() {
         if let data = try? JSONEncoder().encode(notes) {
             try? data.write(to: fileURL, options: .atomic)

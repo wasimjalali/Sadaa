@@ -161,4 +161,9 @@ final class SadaaViewModel: ObservableObject {
         notesStore.remove(id: id)
         refreshNotes()
     }
+
+    func updateNote(_ id: UUID, text: String) {
+        notesStore.update(id: id, text: text)
+        refreshNotes()
+    }
 }

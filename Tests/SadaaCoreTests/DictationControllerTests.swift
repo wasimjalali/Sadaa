@@ -7,10 +7,14 @@ final class FakeRecorder: AudioRecording {
     var onAutoStop: (() -> Void)?
     var startedURL: URL?
     var cancelled = false
+    /// Bytes the fake "recording" writes. Defaults above the controller's
+    /// minimum-audio guard so normal tests record a plausible clip; a test can
+    /// lower it to exercise the too-short guard.
+    var bytesToWrite = 8192
 
     func start(to url: URL) throws {
         startedURL = url
-        try Data([0x00, 0x01]).write(to: url)
+        try Data(count: bytesToWrite).write(to: url)
     }
     func stop() throws -> URL {
         guard let url = startedURL else { throw AudioRecorderError.notRecording }
@@ -63,7 +67,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             now: now,
             isSecureInputActive: isSecureInputActive
@@ -84,7 +88,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             format: format,
             context: { FormattingContext(appBundleID: nil, dictionaryWords: [],
@@ -227,7 +231,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             servedByFallback: { name in fallbackNoted = name })
         controller.toggle()
@@ -248,7 +252,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             servedByFallback: { name in fallbackNoted = name })
         controller.toggle()
@@ -271,7 +275,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) })
         controller.onStateChange = { [weak self] state in self?.states.append(state) }
 
@@ -334,6 +338,45 @@ struct FakeProvider: TranscriptionProvider {
             return
         }
         #expect(message.lowercased().contains("speech"))
+    }
+
+    @Test func testTooShortRecordingIsRejectedBeforeUpload() async throws {
+        // A header-only / near-empty WAV must not be uploaded (the provider 400s
+        // on it). The user gets a plain "too short" notice; nothing is
+        // transcribed, recorded, delivered, or kept for retry.
+        recorder.bytesToWrite = 100
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "must not be used",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let controller = makeController(providers: [provider])
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == [])
+        #expect(records.isEmpty)
+        #expect(!controller.canRetry)
+        guard case .error(let message) = controller.state else {
+            Issue.record("expected a too-short notice, got \(controller.state)")
+            return
+        }
+        #expect(message.lowercased().contains("short"))
+    }
+
+    @Test func testProviderErrorBodyIsSurfaced() async throws {
+        // The provider's own error text must reach the user so a genuine failure
+        // is distinguishable from an opaque status code.
+        let failing = FakeProvider(
+            name: "only",
+            result: .failure(ProviderError.http(400, "audio file is too short")))
+        let controller = makeController(providers: [failing])
+        controller.toggle()
+        await controller.toggleAndWait()
+        guard case .error(let message) = controller.state else {
+            Issue.record("expected error state, got \(controller.state)")
+            return
+        }
+        #expect(message.contains("400"))
+        #expect(message.contains("audio file is too short"))
     }
 
     @Test func testCancelDiscardsRecording() {
@@ -441,7 +484,7 @@ struct FakeProvider: TranscriptionProvider {
             store: store,
             hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
             recordingsToKeep: 10,
-            deliver: { [weak self] text in self?.delivered.append(text) },
+            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             format: { _, ctx in
                 bundleAtFormat = ctx.appBundleID
