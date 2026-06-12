@@ -91,79 +91,6 @@ public final class AzureChatFormatter: @unchecked Sendable {
         return try Self.parse(data, fallbackRaw: rawTranscript)
     }
 
-    // MARK: - Prompt Mode (rewrite a dictation into an optimized prompt)
-
-    /// Builds the chat request for Prompt Mode. Same endpoint, headers,
-    /// temperature, JSON response_format and <transcript> delimiting as
-    /// makeRequest; the only difference is the optimizer system prompt.
-    public func makeOptimizeRequest(rawTranscript: String,
-                                    context: FormattingContext,
-                                    pack: ModelPack) throws -> URLRequest {
-        let system = PromptOptimizerPromptBuilder.systemPrompt(
-            pack: pack,
-            dictionaryWords: context.dictionaryWords,
-            speakerContext: context.speakerContext,
-            language: context.language)
-
-        var components = URLComponents(
-            url: AzureOpenAIProvider.baseURL(from: config.endpoint).appendingPathComponent(
-                "openai/deployments/\(config.deployment)/chat/completions"),
-            resolvingAgainstBaseURL: false)!
-        components.queryItems = [URLQueryItem(name: "api-version",
-                                              value: config.apiVersion)]
-
-        let payload: [String: Any] = [
-            "messages": [
-                ["role": "system", "content": system],
-                ["role": "user", "content": "<transcript>\n\(rawTranscript)\n</transcript>"],
-            ],
-            "temperature": 0.2,
-            "response_format": ["type": "json_object"],
-        ]
-
-        var request = URLRequest(url: components.url!)
-        request.httpMethod = "POST"
-        request.setValue(config.apiKey, forHTTPHeaderField: "api-key")
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-        request.timeoutInterval = 15
-        return request
-    }
-
-    /// Rewrites a dictation into an optimized prompt for the pack's model
-    /// family. Same network handling as format(), but parsing is strict: the
-    /// optimizer promised {text, newTerms} JSON, and anything else is a failure
-    /// (thrown), so the pipeline falls back to the raw transcript instead of
-    /// pasting a malformed response verbatim.
-    public func optimize(rawTranscript: String,
-                         context: FormattingContext,
-                         pack: ModelPack) async throws -> FormattingResult {
-        let request = try makeOptimizeRequest(rawTranscript: rawTranscript,
-                                              context: context, pack: pack)
-        let (data, response): (Data, URLResponse)
-        do {
-            (data, response) = try await AzureOpenAIProvider.withDeadline(
-                seconds: AzureOpenAIProvider.totalDeadline) { [session] in
-                try await session.data(for: request)
-            }
-        } catch let urlError as URLError where urlError.code == .timedOut {
-            throw ProviderError.timedOut
-        } catch let urlError as URLError {
-            throw ProviderError.transport(urlError)
-        }
-        guard let http = response as? HTTPURLResponse else {
-            throw ProviderError.badResponse
-        }
-        guard (200..<300).contains(http.statusCode) else {
-            throw ProviderError.http(http.statusCode,
-                                     String(decoding: data, as: UTF8.self))
-        }
-        let parsed = try Self.parseOptimized(data)
-        return FormattingResult(text: parsed.text, newTerms: parsed.newTerms,
-                                mode: .prompt,
-                                promptTarget: pack.id.displayName)
-    }
-
     // MARK: - Voice edit (rewrite a selection per a spoken instruction)
 
     public func makeRewriteRequest(selection: String,
@@ -176,14 +103,26 @@ public final class AzureChatFormatter: @unchecked Sendable {
         components.queryItems = [URLQueryItem(name: "api-version",
                                               value: config.apiVersion)]
 
-        let system = "You edit the user's selected text according to their spoken instruction. Return ONLY the edited text, with no commentary, no quotes and no markdown. Reply in the same language as the selection."
-        let user = "Instruction: \(instruction)\n\nSelected text:\n\(selection)"
+        // Threads the same context the dictation path uses (app tone profile,
+        // who the speaker is, the language pin and dictionary) so a voice edit
+        // carries the right voice, and decides compose-a-reply vs edit-in-place
+        // from the instruction. The selection and instruction are delimited so
+        // a command hidden in the selected text can't hijack the edit.
+        let profile = FormattingProfiles.resolve(bundleID: context.appBundleID)
+        let system = VoiceEditPromptBuilder.systemPrompt(
+            profile: profile,
+            dictionaryWords: context.dictionaryWords,
+            speakerContext: context.speakerContext,
+            language: context.language)
+        let user = "<instruction>\n\(instruction)\n</instruction>\n\n<selection>\n\(selection)\n</selection>"
         let payload: [String: Any] = [
             "messages": [
                 ["role": "system", "content": system],
                 ["role": "user", "content": user],
             ],
-            "temperature": 0.2,
+            // A touch warmer than the formatting path (0.2): composing a natural
+            // reply needs a little more room than cleaning up a transcript.
+            "temperature": 0.4,
         ]
 
         var request = URLRequest(url: components.url!)
@@ -267,36 +206,6 @@ public final class AzureChatFormatter: @unchecked Sendable {
         return FormattingResult(
             text: content.trimmingCharacters(in: .whitespacesAndNewlines),
             newTerms: [])
-    }
-
-    /// Strict variant for Prompt Mode: the assistant content MUST decode as
-    /// {text, newTerms} with non-empty text. Unlike `parse`, a malformed
-    /// response throws instead of being delivered verbatim, because pasting a
-    /// broken optimizer reply into the user's editor is worse than pasting
-    /// the raw dictation.
-    static func parseOptimized(_ data: Data) throws -> FormattingResult {
-        struct Completion: Decodable {
-            struct Choice: Decodable {
-                struct Message: Decodable { let content: String? }
-                let message: Message
-            }
-            let choices: [Choice]
-        }
-        guard let completion = try? JSONDecoder().decode(Completion.self, from: data),
-              let content = completion.choices.first?.message.content,
-              !content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw ProviderError.badResponse
-        }
-
-        struct Inner: Decodable { let text: String; let newTerms: [String]? }
-        guard let inner = try? JSONDecoder().decode(
-            Inner.self, from: Data(stripCodeFence(content).utf8)) else {
-            throw ProviderError.badResponse
-        }
-        let text = inner.text.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !text.isEmpty else { throw ProviderError.badResponse }
-        return FormattingResult(text: text,
-                                newTerms: Array((inner.newTerms ?? []).prefix(3)))
     }
 
     /// Strips a wrapping markdown code fence (```json … ``` or ``` … ```) when

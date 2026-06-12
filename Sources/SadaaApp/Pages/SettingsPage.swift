@@ -16,10 +16,6 @@ struct SettingsPage: View {
     @State private var apiKey = ""
     @State private var formattingEnabled = true
     @State private var gptDeployment = ""
-    @State private var promptModeEnabled = false
-    @State private var promptModeTarget: ModelPackID = .claude
-    @State private var promptModeApps = ""
-    @State private var promptModeDeployment = ""
     @State private var speakerContext = ""
     @State private var openaiEnabled = false
     @State private var openaiModel = ""
@@ -33,7 +29,6 @@ struct SettingsPage: View {
     @State private var formatterRate = ""
     @State private var launchAtLogin = false
     @State private var launchError = ""
-    @State private var packsError = ""
     @State private var soundEffects = true
     @State private var micGranted = false
     @State private var axTrusted = false
@@ -55,7 +50,6 @@ struct SettingsPage: View {
                 hotkeyCard
                 languageCard
                 formattingCard
-                promptModeCard
                 azureCard
                 fallbackCard
                 costCard
@@ -223,67 +217,6 @@ struct SettingsPage: View {
         }
     }
 
-    private var promptModeCard: some View {
-        card("Prompt mode", icon: "wand.and.stars") {
-            Toggle("Optimize dictations into prompts in coding apps", isOn: $promptModeEnabled)
-                .tint(Theme.navy)
-                // Write through immediately; see the formatting toggle above.
-                .onChange(of: promptModeEnabled) { _, isOn in
-                    settings.promptModeEnabled = isOn
-                }
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Default target model")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
-                Picker("", selection: $promptModeTarget) {
-                    ForEach(ModelPackID.allCases, id: \.self) { id in
-                        Text(id.displayName).tag(id)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
-            }
-            hint("Say \"this is for GPT\" or \"for Gemini\" at the start or end of a dictation to override the default for that one prompt.")
-            VStack(alignment: .leading, spacing: 5) {
-                Text("Apps (one bundle id per line)")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
-                TextEditor(text: $promptModeApps)
-                    .frame(minHeight: 90)
-                    .font(.system(size: 12, design: .monospaced))
-                    .padding(6)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Theme.charcoal.opacity(0.2), lineWidth: 1))
-            }
-            hint("Prompt mode only runs in these apps. Everywhere else, dictations use smart formatting.")
-            field("Prompt deployment", "gpt-4o", $promptModeDeployment)
-            hint("Leave empty to use the formatting deployment.")
-            Button("Open packs folder") { openPacksFolder() }
-                .buttonStyle(SettingsBorderedButtonStyle())
-            if !packsError.isEmpty {
-                Text(packsError).font(.caption).foregroundStyle(.red)
-            }
-            hint("The model packs are editable markdown. Edit a file to change how prompts are written for that model.")
-        }
-    }
-
-    private func openPacksFolder() {
-        let dir = FileManager.default.urls(for: .applicationSupportDirectory,
-                                           in: .userDomainMask)[0]
-            .appendingPathComponent("Sadaa")
-            .appendingPathComponent("ModelPacks")
-        do {
-            try ModelPackLibrary.seedOverrides(into: dir)
-            packsError = ""
-        } catch {
-            packsError = "Couldn't create the packs folder: \(error.localizedDescription)"
-            return
-        }
-        NSWorkspace.shared.open(dir)
-    }
-
     private var fallbackCard: some View {
         card("Fallback providers (optional)", icon: "arrow.triangle.branch") {
             Toggle("Use OpenAI if Azure fails", isOn: $openaiEnabled)
@@ -447,10 +380,6 @@ struct SettingsPage: View {
         apiKey = Keychain.get(account: "azure-openai-key") ?? ""
         formattingEnabled = settings.formattingEnabled
         gptDeployment = settings.gptDeployment
-        promptModeEnabled = settings.promptModeEnabled
-        promptModeTarget = settings.promptModeDefaultTarget
-        promptModeApps = settings.promptModeApps.joined(separator: "\n")
-        promptModeDeployment = settings.promptModeDeployment
         speakerContext = settings.speakerContext
         openaiEnabled = settings.openaiEnabled
         openaiModel = settings.openaiModel
@@ -475,15 +404,9 @@ struct SettingsPage: View {
         let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedAPIVersion.isEmpty { settings.azureAPIVersion = trimmedAPIVersion }
         saveKey(apiKey, account: "azure-openai-key")
-        // formattingEnabled / promptModeEnabled write through from their
-        // toggles, so a menu-bar toggle made while this page is open survives.
+        // formattingEnabled writes through from its toggle, so a menu-bar
+        // toggle made while this page is open survives.
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.promptModeDefaultTarget = promptModeTarget
-        settings.promptModeApps = promptModeApps
-            .split(whereSeparator: \.isNewline)
-            .map { $0.trimmingCharacters(in: .whitespaces) }
-            .filter { !$0.isEmpty }
-        settings.promptModeDeployment = promptModeDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
         settings.soundEffectsEnabled = soundEffects
 

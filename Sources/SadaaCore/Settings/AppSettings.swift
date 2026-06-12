@@ -26,10 +26,6 @@ public final class AppSettings {
         static let maiModel = "maiModel"
         static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
         static let formatterRatePer1kChars = "formatterRatePer1kChars"
-        static let promptModeEnabled = "promptModeEnabled"
-        static let promptModeDefaultTarget = "promptModeDefaultTarget"
-        static let promptModeApps = "promptModeApps"
-        static let promptModeDeployment = "promptModeDeployment"
         static let soundEffectsEnabled = "soundEffectsEnabled"
     }
 
@@ -158,58 +154,5 @@ public final class AppSettings {
     public var formatterRatePer1kChars: Double {
         get { defaults.object(forKey: Keys.formatterRatePer1kChars) as? Double ?? 0.002 }
         set { defaults.set(newValue, forKey: Keys.formatterRatePer1kChars) }
-    }
-
-    // MARK: - Prompt Mode
-
-    /// Rewrite dictations into optimized prompts in the listed apps. Off by
-    /// default so smart formatting stays the standard behavior.
-    public var promptModeEnabled: Bool {
-        get { defaults.bool(forKey: Keys.promptModeEnabled) }
-        set { defaults.set(newValue, forKey: Keys.promptModeEnabled) }
-    }
-
-    /// The model family used when the speaker did not name one out loud.
-    public var promptModeDefaultTarget: ModelPackID {
-        get { ModelPackID(rawValue: defaults.string(forKey: Keys.promptModeDefaultTarget) ?? "") ?? .claude }
-        set { defaults.set(newValue.rawValue, forKey: Keys.promptModeDefaultTarget) }
-    }
-
-    /// Bundle ids where Prompt Mode applies by default: the code/terminal apps,
-    /// the popular non-Apple terminals, the Claude and ChatGPT desktop apps, and
-    /// the major browsers, so browser-based chatbots (ChatGPT, Claude, Gemini in
-    /// the browser) get optimized prompts too. Listed only here, never added to
-    /// FormattingProfiles.code.bundleIDs, so browsers don't inherit the code
-    /// formatting profile. Editable in Settings.
-    public static let defaultPromptModeApps: [String] =
-        FormattingProfiles.code.bundleIDs + [
-            // Other common terminals
-            "com.mitchellh.ghostty",        // Ghostty
-            "net.kovidgoyal.kitty",         // kitty
-            "org.alacritty",                // Alacritty
-            "com.github.wez.wezterm",       // WezTerm
-            "co.zeit.hyper",                // Hyper
-            // Chatbot desktop apps
-            "com.anthropic.claudefordesktop",
-            "com.openai.chat",
-            // Browsers (browser-based chatbots)
-            "com.apple.Safari",
-            "com.google.Chrome",
-            "company.thebrowser.Browser",   // Arc
-            "com.microsoft.edgemac",
-            "com.brave.Browser",
-            "org.mozilla.firefox",
-        ]
-
-    /// Bundle ids where Prompt Mode applies. Defaults to `defaultPromptModeApps`.
-    public var promptModeApps: [String] {
-        get { defaults.stringArray(forKey: Keys.promptModeApps) ?? Self.defaultPromptModeApps }
-        set { defaults.set(newValue, forKey: Keys.promptModeApps) }
-    }
-
-    /// Chat deployment for Prompt Mode. Empty means reuse the formatting one.
-    public var promptModeDeployment: String {
-        get { defaults.string(forKey: Keys.promptModeDeployment) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.promptModeDeployment) }
     }
 }

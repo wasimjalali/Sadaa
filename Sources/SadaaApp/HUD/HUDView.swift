@@ -3,13 +3,12 @@ import SwiftUI
 import SadaaCore
 
 /// Display-only state for the HUD pill. Richer than DictationState on purpose
-/// (recording carries seconds and level, optimizing exists only here), so new
-/// cases land here, not in the controller state machines.
+/// (recording carries seconds and level), so new display-only cases land here,
+/// not in the controller state machines.
 enum HUDDisplay: Equatable {
     case recording(seconds: Int, level: Float)
     case transcribing
     case delivering
-    case optimizing(target: String)
     case error(String)
 }
 
@@ -39,9 +38,6 @@ struct HUDView: View {
             status("Transcribing")
         case .delivering:
             status("Inserting")
-        case .optimizing(let target):
-            // Plain language for the AI step, no magic-wand iconography.
-            status("Optimizing for \(target)")
         case .error(let message):
             HStack(spacing: 7) {
                 Image(systemName: "exclamationmark.triangle.fill")
@@ -55,11 +51,17 @@ struct HUDView: View {
         }
     }
 
-    /// A working state: gold spinner plus a quiet label. The recording state
-    /// just showed the full logo, so these brief states stay minimal.
+    /// A working state: a spinner plus a quiet label. The recording state just
+    /// showed the full logo, so these brief states stay minimal. The spinner is
+    /// cream, not gold: dark gold on the near-black navy pill was effectively
+    /// invisible, so the ring never read as "working". Cream matches the label
+    /// beside it, which was always legible.
     private func status(_ label: String) -> some View {
         HStack(spacing: 7) {
-            ProgressView().controlSize(.mini).tint(Theme.gold)
+            ProgressView()
+                .progressViewStyle(.circular)
+                .controlSize(.small)
+                .tint(Theme.cream)
             Text(label)
                 .font(.system(size: 11))
                 .foregroundStyle(Theme.cream)

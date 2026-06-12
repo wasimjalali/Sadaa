@@ -20,9 +20,13 @@ import Foundation
             "https://myres.openai.azure.com/openai/deployments/gpt-4o-mini/chat/completions?api-version=2024-10-21")
         let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
         let messages = json["messages"] as! [[String: String]]
-        #expect(messages.first?["content"]?.contains("edit the user's selected text") == true)
+        // The system prompt now carries the compose-vs-transform contract.
+        #expect(messages.first?["content"]?.contains("selected text") == true)
+        #expect(messages.first?["content"]?.contains("COMPOSE") == true)
+        // Instruction and selection are delimited in the user message.
         #expect(messages.last?["content"]?.contains("fix the typo") == true)
         #expect(messages.last?["content"]?.contains("teh cat") == true)
+        #expect(messages.last?["content"]?.contains("<selection>") == true)
         // Rewrite returns prose, not JSON, so no json_object response_format.
         #expect(json["response_format"] == nil)
     }

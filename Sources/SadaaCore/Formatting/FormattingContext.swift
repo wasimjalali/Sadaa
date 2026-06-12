@@ -22,11 +22,12 @@ public struct FormattingContext: Sendable {
 }
 
 /// How a dictation's text was produced. Recorded per dictation so History can
-/// show whether Prompt Mode actually ran (its absence is the diagnostic).
+/// show whether the text was cleaned up (formatted) or left raw.
 public enum FormattingMode: String, Codable, Equatable, Sendable {
     case raw        // pure transcription: raw toggle, formatter off, or fallback
     case formatted  // smart formatting cleaned it up
-    case prompt     // Prompt Mode rewrote it for a target model
+    case prompt     // dormant: Prompt Mode was removed; kept so pre-removal
+                    // history.json records still decode and display.
 }
 
 /// What the formatter returns: polished text plus up to a few newly guessed terms.
