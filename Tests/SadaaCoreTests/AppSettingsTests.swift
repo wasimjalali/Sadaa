@@ -20,8 +20,9 @@ import Foundation
         #expect(settings.recordingsToKeep == 10)
         #expect(settings.azureEndpoint == "")
         #expect(settings.azureDeployment == "")
-        #expect(settings.hotkeyKeycode == 54)      // Right Command
-        #expect(settings.voiceEditKeycode == 61)   // Right Option
+        #expect(settings.hotkeyKeycode == 54)          // Right Command
+        #expect(settings.voiceEditKeycode == 61)       // Right Option
+        #expect(settings.languageSwitchKeycode == 60)  // Right Shift (under Return)
         #expect(settings.soundEffectsEnabled == true)
     }
 
@@ -33,6 +34,7 @@ import Foundation
         settings.recordingsToKeep = 5
         settings.hotkeyKeycode = 61
         settings.voiceEditKeycode = 54
+        settings.languageSwitchKeycode = 63
         #expect(settings.azureEndpoint == "https://myres.openai.azure.com")
         #expect(settings.azureDeployment == "whisper")
         #expect(settings.languagePin == .de)
@@ -40,5 +42,14 @@ import Foundation
         #expect(settings.recordingsToKeep == 5)
         #expect(settings.hotkeyKeycode == 61)
         #expect(settings.voiceEditKeycode == 54)
+        #expect(settings.languageSwitchKeycode == 63)
+    }
+
+    @Test func testQuickToggleFlipsEnglishAndGerman() {
+        #expect(LanguagePin.en.quickToggled == .de)
+        #expect(LanguagePin.de.quickToggled == .en)
+        // From auto the first tap lands on English, then it alternates.
+        #expect(LanguagePin.auto.quickToggled == .en)
+        #expect(LanguagePin.auto.quickToggled.quickToggled == .de)
     }
 }

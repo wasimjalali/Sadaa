@@ -10,6 +10,8 @@ enum HUDDisplay: Equatable {
     case transcribing
     case delivering
     case error(String)
+    /// A brief confirmation that the dictation language was switched.
+    case language(LanguagePin)
 }
 
 struct HUDView: View {
@@ -47,6 +49,18 @@ struct HUDView: View {
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.cream)
                     .lineLimit(2)
+            }
+        case .language(let pin):
+            // A clear, glanceable confirmation of the language you just switched
+            // to: a gold globe and the language name, larger than the working
+            // labels so it reads at a glance from across the screen.
+            HStack(spacing: 7) {
+                Image(systemName: "globe")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.gold)
+                Text(PageFormat.languageLabel(pin))
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.cream)
             }
         }
     }

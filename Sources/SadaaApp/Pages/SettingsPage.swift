@@ -284,11 +284,21 @@ struct SettingsPage: View {
                 .labelsHidden()
                 .frame(maxWidth: 240, alignment: .leading)
             }
+            controlRow("Language key (tap to switch dictation between English and German)") {
+                Picker("", selection: languageSwitchBinding) {
+                    ForEach(HotkeyOption.all) { option in
+                        Text(option.label).tag(option.keycode)
+                    }
+                }
+                .pickerStyle(.menu)
+                .labelsHidden()
+                .frame(maxWidth: 240, alignment: .leading)
+            }
             statusCapsule(viewModel.hotkeyActive
                           ? "Hotkeys are active."
                           : "Hotkeys are not active. Grant Accessibility below.",
                           good: viewModel.hotkeyActive)
-            hint("Pick two different keys. To voice-edit: select some text, tap \(HotkeyOption.label(for: viewModel.voiceEditKeycode)), speak your instruction (\"make it formal\", \"fix the grammar\"), then tap the key again. Cancel any recording with Esc.")
+            hint("Pick three different keys. Tap \(HotkeyOption.label(for: viewModel.languageSwitchKeycode)) any time to flip dictation between English and German; the language shows on screen. To voice-edit: select some text, tap \(HotkeyOption.label(for: viewModel.voiceEditKeycode)), speak your instruction (\"make it formal\", \"fix the grammar\"), then tap the key again. Cancel any recording with Esc.")
         }
     }
 
@@ -342,6 +352,13 @@ struct SettingsPage: View {
         Binding(
             get: { viewModel.voiceEditKeycode },
             set: { viewModel.setVoiceEditKeycode($0) }
+        )
+    }
+
+    private var languageSwitchBinding: Binding<Int> {
+        Binding(
+            get: { viewModel.languageSwitchKeycode },
+            set: { viewModel.setLanguageSwitchKeycode($0) }
         )
     }
 

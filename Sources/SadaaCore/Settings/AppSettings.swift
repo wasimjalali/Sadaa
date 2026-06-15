@@ -2,6 +2,16 @@ import Foundation
 
 public enum LanguagePin: String, CaseIterable, Sendable {
     case auto, en, de
+
+    /// The next language for the quick-switch key: a straight English<->German
+    /// flip. From `.auto`, the first tap lands on English, then it alternates.
+    public var quickToggled: LanguagePin {
+        switch self {
+        case .en: return .de
+        case .de: return .en
+        case .auto: return .en
+        }
+    }
 }
 
 /// Non-secret app configuration. API keys live in Keychain, never here.
@@ -15,6 +25,7 @@ public final class AppSettings {
         static let recordingsToKeep = "recordingsToKeep"
         static let hotkeyKeycode = "hotkeyKeycode"
         static let voiceEditKeycode = "voiceEditKeycode"
+        static let languageSwitchKeycode = "languageSwitchKeycode"
         static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
         static let speakerContext = "speakerContext"
@@ -81,6 +92,17 @@ public final class AppSettings {
     public var voiceEditKeycode: Int {
         get { defaults.object(forKey: Keys.voiceEditKeycode) as? Int ?? 61 }
         set { defaults.set(newValue, forKey: Keys.voiceEditKeycode) }
+    }
+
+    /// Virtual keycode of the language quick-switch key. Default 60 = Right Shift
+    /// (the Shift key under the Return key) by explicit user choice. A clean tap
+    /// flips the dictation language between English and German. A bare Shift tap
+    /// can fire by accident during fast capitalization, so if that becomes a
+    /// nuisance the key is changeable in Settings. The Settings layer keeps it
+    /// distinct from the dictation and voice-edit keys.
+    public var languageSwitchKeycode: Int {
+        get { defaults.object(forKey: Keys.languageSwitchKeycode) as? Int ?? 60 }
+        set { defaults.set(newValue, forKey: Keys.languageSwitchKeycode) }
     }
 
     /// Azure GPT deployment used for smart formatting. Spec section 3.6.

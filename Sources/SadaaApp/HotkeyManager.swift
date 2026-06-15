@@ -38,11 +38,17 @@ final class HotkeyManager {
     /// Stored (not derived) so the user can pick it independently in Settings;
     /// the Settings layer guarantees it never equals activationKeycode.
     var voiceEditKeycode: Int64 = 61
+    /// The modifier key whose tap flips the dictation language. Default Right
+    /// Shift (60), the Shift key under Return, by explicit user choice. The
+    /// Settings layer keeps it distinct from the other two keys.
+    var languageSwitchKeycode: Int64 = 60
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
     /// Voice-edit key tap: voice-edit the current selection. Spec section 8.
     var onVoiceEdit: (() -> Void)?
+    /// Language key tap: flip the dictation language between English and German.
+    var onLanguageSwitch: (() -> Void)?
 
     /// The flag a given modifier keycode sets while held, used to read down/up.
     static func flagMask(for keycode: Int64) -> CGEventFlags {
@@ -63,6 +69,7 @@ final class HotkeyManager {
     // detector (its event names are historical, from the original Right Option).
     private var activationRecognizer = RightOptionTapRecognizer()
     private var voiceEditRecognizer = RightOptionTapRecognizer()
+    private var languageSwitchRecognizer = RightOptionTapRecognizer()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
 
@@ -134,15 +141,22 @@ final class HotkeyManager {
                                                  : .rightOptionUp(at: now)) {
                 DispatchQueue.main.async { [weak self] in self?.onVoiceEdit?() }
             }
+        case .flagsChanged where keycode == languageSwitchKeycode:
+            let isDown = event.flags.contains(Self.flagMask(for: keycode))
+            if languageSwitchRecognizer.handle(isDown ? .rightOptionDown(at: now)
+                                                      : .rightOptionUp(at: now)) {
+                DispatchQueue.main.async { [weak self] in self?.onLanguageSwitch?() }
+            }
         case .keyDown where keycode == Self.escapeKeycode:
             if isRecordingActive() {
                 DispatchQueue.main.async { [weak self] in self?.onCancel?() }
                 return nil // consume Esc so the frontmost app never sees it
             }
         case .keyDown:
-            // Any other key invalidates a pending tap on either tap-key.
+            // Any other key invalidates a pending tap on every tap-key.
             _ = activationRecognizer.handle(.otherKeyDown)
             _ = voiceEditRecognizer.handle(.otherKeyDown)
+            _ = languageSwitchRecognizer.handle(.otherKeyDown)
         default:
             break
         }

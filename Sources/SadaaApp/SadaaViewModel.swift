@@ -18,6 +18,7 @@ final class SadaaViewModel: ObservableObject {
     @Published var hotkeyActive: Bool = false
     @Published var hotkeyKeycode: Int = 54
     @Published var voiceEditKeycode: Int = 61
+    @Published var languageSwitchKeycode: Int = 60
     /// A failed dictation whose audio is retained and can be retried.
     @Published var canRetry: Bool = false
 
@@ -25,6 +26,8 @@ final class SadaaViewModel: ObservableObject {
     var onHotkeyKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to push a new voice-edit key to the live HotkeyManager.
     var onVoiceEditKeycodeChange: ((Int) -> Void)?
+    /// Set by the app layer to push a new language-switch key to the live HotkeyManager.
+    var onLanguageSwitchKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to retry the last failed dictation on its audio.
     var onRetry: (() -> Void)?
 
@@ -75,35 +78,56 @@ final class SadaaViewModel: ObservableObject {
         languagePin = settings.languagePin
         hotkeyKeycode = settings.hotkeyKeycode
         voiceEditKeycode = settings.voiceEditKeycode
+        languageSwitchKeycode = settings.languageSwitchKeycode
     }
 
-    /// Sets the dictation key. If it would collide with the voice-edit key, the
-    /// voice-edit key takes over this key's previous value (a swap), so the two
-    /// are always distinct.
-    func setHotkeyKeycode(_ code: Int) {
-        if code == voiceEditKeycode {
-            let freed = hotkeyKeycode
-            settings.voiceEditKeycode = freed
-            voiceEditKeycode = freed
-            onVoiceEditKeycodeChange?(freed)
-        }
+    // The three tap-keys (dictation, voice-edit, language-switch) must always be
+    // pairwise distinct: one CGEvent tap can't disambiguate two keys bound to the
+    // same keycode. Each setter below swaps the colliding key to the value this
+    // key just freed, which is guaranteed distinct from both the new value and
+    // the untouched third key, so the invariant holds after every change.
+
+    private func applyHotkey(_ code: Int) {
         settings.hotkeyKeycode = code
         hotkeyKeycode = code
         onHotkeyKeycodeChange?(code)
     }
 
-    /// Sets the voice-edit key, swapping the dictation key out of the way if the
-    /// two would collide.
-    func setVoiceEditKeycode(_ code: Int) {
-        if code == hotkeyKeycode {
-            let freed = voiceEditKeycode
-            settings.hotkeyKeycode = freed
-            hotkeyKeycode = freed
-            onHotkeyKeycodeChange?(freed)
-        }
+    private func applyVoiceEdit(_ code: Int) {
         settings.voiceEditKeycode = code
         voiceEditKeycode = code
         onVoiceEditKeycodeChange?(code)
+    }
+
+    private func applyLanguageSwitch(_ code: Int) {
+        settings.languageSwitchKeycode = code
+        languageSwitchKeycode = code
+        onLanguageSwitchKeycodeChange?(code)
+    }
+
+    /// Sets the dictation key, swapping whichever other key collides onto this
+    /// key's previous value so all three stay distinct.
+    func setHotkeyKeycode(_ code: Int) {
+        let freed = hotkeyKeycode
+        if code == voiceEditKeycode { applyVoiceEdit(freed) }
+        else if code == languageSwitchKeycode { applyLanguageSwitch(freed) }
+        applyHotkey(code)
+    }
+
+    /// Sets the voice-edit key, swapping the colliding key out of the way.
+    func setVoiceEditKeycode(_ code: Int) {
+        let freed = voiceEditKeycode
+        if code == hotkeyKeycode { applyHotkey(freed) }
+        else if code == languageSwitchKeycode { applyLanguageSwitch(freed) }
+        applyVoiceEdit(code)
+    }
+
+    /// Sets the language-switch key, swapping the colliding key out of the way.
+    func setLanguageSwitchKeycode(_ code: Int) {
+        let freed = languageSwitchKeycode
+        if code == hotkeyKeycode { applyHotkey(freed) }
+        else if code == voiceEditKeycode { applyVoiceEdit(freed) }
+        applyLanguageSwitch(code)
     }
 
     // MARK: - Dictionary

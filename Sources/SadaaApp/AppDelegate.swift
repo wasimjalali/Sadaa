@@ -8,6 +8,9 @@ import SadaaCore
 final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var statusItem: NSStatusItem?
     private var formattingMenuItem: NSMenuItem?
+    /// The three Language submenu items, kept so a hotkey switch can refresh
+    /// their checkmarks without rebuilding the menu.
+    private var languageMenuItems: [NSMenuItem] = []
     private let settings = AppSettings()
     private let hotkeys = HotkeyManager()
     private let hud = HUDPanel()
@@ -59,6 +62,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             return
         }
         controller?.toggle(rawMode: rawMode)
+    }
+
+    /// Flips the dictation language between English and German and flashes the
+    /// new language in the HUD. Ignored while a dictation or voice edit is in
+    /// flight, so the language never changes out from under an active recording.
+    private func switchLanguage() {
+        guard !isDictationBusy, !isVoiceEditBusy else { return }
+        let next = settings.languagePin.quickToggled
+        settings.languagePin = next
+        viewModel?.refreshConfig()   // keep Home + Settings in sync
+        syncLanguageMenu()
+        hud.show(.language(next))
+        hud.hide(after: 1.3)
+    }
+
+    /// Refreshes the Language submenu checkmarks to match the stored pin, used
+    /// after a hotkey switch and whenever the menu is about to open.
+    private func syncLanguageMenu() {
+        for item in languageMenuItems {
+            guard let raw = item.representedObject as? String else { continue }
+            item.state = settings.languagePin.rawValue == raw ? .on : .off
+        }
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -434,6 +459,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         viewModel?.onVoiceEditKeycodeChange = { [weak self] code in
             self?.hotkeys.voiceEditKeycode = Int64(code)
         }
+        hotkeys.languageSwitchKeycode = Int64(settings.languageSwitchKeycode)
+        viewModel?.onLanguageSwitchKeycodeChange = { [weak self] code in
+            self?.hotkeys.languageSwitchKeycode = Int64(code)
+        }
+        hotkeys.onLanguageSwitch = { [weak self] in self?.switchLanguage() }
         hotkeys.onToggle = { [weak self] in
             guard let self else { return }
             self.toggleDictation(rawMode: NSEvent.modifierFlags.contains(.shift))
@@ -615,6 +645,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.addItem(.separator())
 
         let languageMenu = NSMenu()
+        languageMenuItems = []
         for pin in LanguagePin.allCases {
             let title = ["auto": "Auto-detect", "en": "English",
                          "de": "German"][pin.rawValue]!
@@ -625,6 +656,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             item.representedObject = pin.rawValue
             item.state = settings.languagePin == pin ? .on : .off
             languageMenu.addItem(item)
+            languageMenuItems.append(item)
         }
         let languageItem = NSMenuItem(title: "Language",
                                       action: nil, keyEquivalent: "")
@@ -659,6 +691,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// change made on the Settings page is reflected here too.
     func menuWillOpen(_ menu: NSMenu) {
         formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
+        syncLanguageMenu()
     }
 
     @objc private func menuToggle() {
