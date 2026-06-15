@@ -53,6 +53,20 @@ import Testing
         #expect(prompt.contains("result is German"))
     }
 
+    @Test func testPreservesWordingDoesNotRewrite() {
+        // The cleaner must not paraphrase, summarize or reword the speaker's
+        // content. It only cleans up filler, punctuation, spelling and casing.
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.code,
+            dictionaryWords: [],
+            speakerContext: "ctx")
+        #expect(prompt.contains("Do not paraphrase"))
+        #expect(prompt.contains("exact words"))
+        // The target-app tone must be subordinate to fidelity, not a license to
+        // reword.
+        #expect(prompt.contains("never to reword"))
+    }
+
     @Test func testNeverActsOnDictatedContent() {
         // Dictation must transcribe, never answer or execute what was said.
         let prompt = FormattingPromptBuilder.systemPrompt(

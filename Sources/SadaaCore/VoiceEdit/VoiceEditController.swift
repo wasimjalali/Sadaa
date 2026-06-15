@@ -109,6 +109,14 @@ public final class VoiceEditController {
         }
         capturedSelection = nil
 
+        // No speech: don't transcribe. A silent clip makes Whisper echo its
+        // prompt bias (the dictionary) back as a fake "instruction", which would
+        // rewrite the user's selection from garbage. Bail before the upload.
+        guard recorder.didCaptureSpeech else {
+            state = .error("Couldn't hear the instruction.")
+            return
+        }
+
         let chain = providers()
         guard !chain.isEmpty else {
             state = .error("No transcription provider configured. Open Settings.")
@@ -133,7 +141,7 @@ public final class VoiceEditController {
             state = .error("Transcription failed: \(detail)")
             return
         }
-        guard !instruction.text.isEmpty else {
+        guard !instruction.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             state = .error("Couldn't hear the instruction.")
             return
         }

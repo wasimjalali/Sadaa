@@ -9,16 +9,13 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
     public let durationSeconds: Double?
     /// Credit-awareness estimate. Optional so pre-cost history.json still decodes.
     public let estimatedCost: Double?
-    /// How the text was produced (raw, formatted, prompt). Optional so
-    /// pre-Prompt-Mode history.json still decodes.
+    /// How the text was produced (raw or formatted). Optional so pre-mode
+    /// history.json still decodes.
     public let mode: FormattingMode?
-    /// Prompt Mode target display name ("Claude"); nil unless mode == .prompt.
-    public let promptTarget: String?
 
     public init(id: UUID = UUID(), text: String, createdAt: Date,
                 language: String?, provider: String, durationSeconds: Double?,
-                estimatedCost: Double? = nil, mode: FormattingMode? = nil,
-                promptTarget: String? = nil) {
+                estimatedCost: Double? = nil, mode: FormattingMode? = nil) {
         self.id = id
         self.text = text
         self.createdAt = createdAt
@@ -27,12 +24,11 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
         self.durationSeconds = durationSeconds
         self.estimatedCost = estimatedCost
         self.mode = mode
-        self.promptTarget = promptTarget
     }
 
     public func withEstimatedCost(_ cost: Double?) -> DictationRecord {
         DictationRecord(id: id, text: text, createdAt: createdAt, language: language,
                         provider: provider, durationSeconds: durationSeconds,
-                        estimatedCost: cost, mode: mode, promptTarget: promptTarget)
+                        estimatedCost: cost, mode: mode)
     }
 }

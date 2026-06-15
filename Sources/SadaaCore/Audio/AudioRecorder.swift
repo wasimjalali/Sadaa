@@ -7,6 +7,12 @@ public protocol AudioRecording: AnyObject {
     func cancel()
     var onLevel: ((Float) -> Void)? { get set }
     var onAutoStop: (() -> Void)? { get set }
+    /// True when at least one buffer in the just-finished recording crossed the
+    /// speech threshold. False means the user was silent the whole time, so the
+    /// audio must not be transcribed: a silent clip makes Whisper echo its own
+    /// prompt bias (the dictionary) back as a fake transcript. Valid to read
+    /// after stop().
+    var didCaptureSpeech: Bool { get }
 }
 
 public enum AudioRecorderError: Error {
@@ -37,6 +43,17 @@ public final class AudioRecorder: AudioRecording {
     private let silenceTimeout: TimeInterval
     /// Hard cap on recording length. Spec section 8: 10 minutes.
     private let maxDuration: TimeInterval
+    /// Peak absolute sample at or above which a buffer counts as containing
+    /// speech. Deliberately gated on PEAK, not the buffer-averaged RMS the
+    /// watchdog uses: a soft word's RMS can average below the watchdog's 0.01
+    /// silence line and be washed out, but its voiced peaks still stand well
+    /// clear of room tone. 0.02 sits in the gap, low enough to catch soft
+    /// speakers and quiet mics, high enough to reject a truly silent clip (the
+    /// only case that makes Whisper echo its prompt bias back as a transcript).
+    private static let speechPeakThreshold: Float = 0.02
+    /// Latched true once any buffer crosses the speech threshold. Read/written
+    /// only on writerQueue so the cross-thread read in didCaptureSpeech is safe.
+    private var capturedSpeech = false
 
     /// Serial queue that exclusively owns the WavWriter. All create/append/finish
     /// calls happen here so the real-time tap thread never blocks on file I/O.
@@ -46,6 +63,10 @@ public final class AudioRecorder: AudioRecording {
     /// Fires when silence timeout or max duration is hit; the app layer
     /// treats it exactly like a stop toggle.
     public var onAutoStop: (() -> Void)?
+
+    /// Whether the just-finished recording contained any speech. Serialized
+    /// through writerQueue, which stop() drains, so it reflects every buffer.
+    public var didCaptureSpeech: Bool { writerQueue.sync { capturedSpeech } }
 
     public init(silenceTimeout: TimeInterval = 60,
                 maxDuration: TimeInterval = 600) {
@@ -69,6 +90,7 @@ public final class AudioRecorder: AudioRecording {
         writerQueue.sync {
             do {
                 self.writer = try WavWriter(url: url, sampleRate: 16_000)
+                self.capturedSpeech = false   // fresh session: no speech heard yet
             } catch {
                 writerError = error
             }
@@ -146,12 +168,19 @@ public final class AudioRecorder: AudioRecording {
     private func process(buffer: AVAudioPCMBuffer,
                          converter: AVAudioConverter,
                          targetFormat: AVAudioFormat) {
-        // RMS from the float hardware buffer for HUD levels + silence detection.
+        // RMS (for HUD levels + the silence watchdog) and peak (for the speech
+        // gate) from the float hardware buffer, in one pass.
         var rms: Float = 0
+        var peak: Float = 0
         if let channel = buffer.floatChannelData?[0], buffer.frameLength > 0 {
             let n = Int(buffer.frameLength)
             var sum: Float = 0
-            for i in 0..<n { sum += channel[i] * channel[i] }
+            for i in 0..<n {
+                let sample = channel[i]
+                sum += sample * sample
+                let magnitude = abs(sample)
+                if magnitude > peak { peak = magnitude }
+            }
             rms = (sum / Float(n)).squareRoot()
         }
         onLevel?(rms)
@@ -183,9 +212,12 @@ public final class AudioRecorder: AudioRecording {
               let channel = out.int16ChannelData?[0], out.frameLength > 0 else { return }
         let samples = Array(UnsafeBufferPointer(start: channel,
                                                 count: Int(out.frameLength)))
+        let isSpeech = peak >= Self.speechPeakThreshold
         // Hand the converted samples to the serial queue; the WavWriter append
-        // (the only file I/O) runs there, never on the real-time tap thread.
+        // (the only file I/O) runs there, never on the real-time tap thread. The
+        // speech latch is set on the same queue so didCaptureSpeech is race-free.
         writerQueue.async { [weak self] in
+            if isSpeech { self?.capturedSpeech = true }
             try? self?.writer?.append(samples: samples)
         }
     }

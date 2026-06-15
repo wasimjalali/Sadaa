@@ -11,6 +11,9 @@ final class FakeRecorder: AudioRecording {
     /// minimum-audio guard so normal tests record a plausible clip; a test can
     /// lower it to exercise the too-short guard.
     var bytesToWrite = 8192
+    /// Whether the fake recording "heard" speech. Defaults true so normal tests
+    /// model a real dictation; a test sets it false to exercise the silence gate.
+    var didCaptureSpeech = true
 
     func start(to url: URL) throws {
         startedURL = url
@@ -340,6 +343,34 @@ struct FakeProvider: TranscriptionProvider {
         #expect(message.lowercased().contains("speech"))
     }
 
+    @Test func testSilentRecordingIsRejectedBeforeUpload() async throws {
+        // The user held the key but said nothing. Without this gate, the silent
+        // clip is uploaded and Whisper echoes its dictionary prompt-bias back as a
+        // fake transcript, which gets formatted, pasted and left on the clipboard.
+        // Nothing must be transcribed, formatted, recorded, delivered or retried.
+        recorder.didCaptureSpeech = false
+        let provider = FakeProvider(
+            name: "fake",
+            result: .success(Transcript(text: "Karko AI, Supabase, Stripe",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        var formatterRan = false
+        let controller = makeFormattingController(providers: [provider]) { _, _ in
+            formatterRan = true
+            return FormattingResult(text: "WRONG", newTerms: [])
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == [])
+        #expect(records.isEmpty)
+        #expect(!formatterRan)
+        #expect(!controller.canRetry)
+        guard case .error(let message) = controller.state else {
+            Issue.record("expected a no-speech notice, got \(controller.state)")
+            return
+        }
+        #expect(message.lowercased().contains("speech"))
+    }
+
     @Test func testTooShortRecordingIsRejectedBeforeUpload() async throws {
         // A header-only / near-empty WAV must not be uploaded (the provider 400s
         // on it). The user gets a plain "too short" notice; nothing is
@@ -412,20 +443,6 @@ struct FakeProvider: TranscriptionProvider {
         #expect(delivered == [])
     }
 
-    @Test func testPromptModeResultRecordsModeAndTarget() async throws {
-        let provider = FakeProvider(name: "fake",
-            result: .success(Transcript(text: "make a button", detectedLanguage: nil,
-                                        durationSeconds: nil)))
-        let controller = makeFormattingController(providers: [provider]) { _, _ in
-            FormattingResult(text: "optimized prompt", newTerms: [],
-                             mode: .prompt, promptTarget: "Claude")
-        }
-        controller.toggle()
-        await controller.toggleAndWait()
-        #expect(records.first?.mode == .prompt)
-        #expect(records.first?.promptTarget == "Claude")
-    }
-
     @Test func testFormattedResultRecordsFormattedMode() async throws {
         let provider = FakeProvider(name: "fake",
             result: .success(Transcript(text: "hello", detectedLanguage: nil,
@@ -436,7 +453,6 @@ struct FakeProvider: TranscriptionProvider {
         controller.toggle()
         await controller.toggleAndWait()
         #expect(records.first?.mode == .formatted)
-        #expect(records.first?.promptTarget == nil)
     }
 
     @Test func testRawModeRecordsRawMode() async throws {
@@ -463,7 +479,6 @@ struct FakeProvider: TranscriptionProvider {
         controller.toggle()
         await controller.toggleAndWait()
         #expect(records.first?.mode == .raw)
-        #expect(records.first?.promptTarget == nil)
     }
 
     @Test func testRetryUsesContextCapturedAtDictationTime() async throws {

@@ -166,6 +166,15 @@ public final class DictationController {
             state = .error("Couldn't stop recording: \(error.localizedDescription)")
             return
         }
+        // The user was silent the whole time: never transcribe it. A silent clip
+        // makes Whisper echo its prompt bias (the whole dictionary) back as a
+        // fake transcript, which then gets formatted, pasted and left on the
+        // clipboard. Discard here so nothing is uploaded, billed or delivered.
+        guard recorder.didCaptureSpeech else {
+            try? store.prune(keep: recordingsToKeep)
+            state = .error("No speech detected.")
+            return
+        }
         // Wall-clock recording length. The Azure json response carries no
         // duration, so this is the cost meter's only signal on the default path.
         let measuredDuration = recordingStartedAt.map { max(0, now().timeIntervalSince($0)) }
@@ -243,13 +252,11 @@ public final class DictationController {
 
         var finalText = transcript.text
         var mode: FormattingMode = .raw
-        var promptTarget: String?
         if !pendingRawMode, let format {
             do {
                 let result = try await format(transcript.text, formattingContext)
                 finalText = result.text
                 mode = result.mode
-                promptTarget = result.promptTarget
                 if !result.newTerms.isEmpty { suggestTerms(result.newTerms) }
             } catch {
                 formatterFellBack()   // keep raw finalText; mode stays .raw
@@ -263,8 +270,7 @@ public final class DictationController {
             language: transcript.detectedLanguage,
             provider: usedProvider ?? "unknown",
             durationSeconds: transcript.durationSeconds ?? measuredDuration,
-            mode: mode,
-            promptTarget: promptTarget))
+            mode: mode))
 
         state = .delivering
         try? store.prune(keep: recordingsToKeep)

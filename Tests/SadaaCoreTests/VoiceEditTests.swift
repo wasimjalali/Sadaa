@@ -103,6 +103,29 @@ import Foundation
         #expect(replaced.isEmpty)
     }
 
+    @Test func testSilentInstructionIsRejectedBeforeUpload() async {
+        // The user pressed the key with a selection but said nothing. Without the
+        // gate, the silent clip makes Whisper echo its dictionary prompt-bias as a
+        // fake instruction and the selection gets rewritten from garbage. Nothing
+        // must be transcribed or replaced.
+        recorder.didCaptureSpeech = false
+        var rewriteRan = false
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "Karko AI, Supabase",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let controller = make(selection: "original", providers: [provider]) { _, _ in
+            rewriteRan = true
+            return "WRONG"
+        }
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(replaced.isEmpty)
+        #expect(!rewriteRan)
+        guard case .error = controller.state else {
+            Issue.record("expected error"); return
+        }
+    }
+
     @Test func testRewriteFailureLeavesTextUnchanged() async {
         struct Boom: Error {}
         let provider = FakeProvider(name: "fake",

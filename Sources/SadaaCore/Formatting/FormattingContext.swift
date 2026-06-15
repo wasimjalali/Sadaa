@@ -23,11 +23,24 @@ public struct FormattingContext: Sendable {
 
 /// How a dictation's text was produced. Recorded per dictation so History can
 /// show whether the text was cleaned up (formatted) or left raw.
-public enum FormattingMode: String, Codable, Equatable, Sendable {
+public enum FormattingMode: String, Equatable, Sendable {
     case raw        // pure transcription: raw toggle, formatter off, or fallback
     case formatted  // smart formatting cleaned it up
-    case prompt     // dormant: Prompt Mode was removed; kept so pre-removal
-                    // history.json records still decode and display.
+}
+
+extension FormattingMode: Codable {
+    /// Lenient decode so older history.json still loads: the removed "prompt"
+    /// mode (Prompt Mode, deleted) and any unknown value map to .raw instead of
+    /// failing the whole history load.
+    public init(from decoder: Decoder) throws {
+        let raw = try decoder.singleValueContainer().decode(String.self)
+        self = FormattingMode(rawValue: raw) ?? .raw
+    }
+
+    public func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 /// What the formatter returns: polished text plus up to a few newly guessed terms.
@@ -36,14 +49,11 @@ public struct FormattingResult: Equatable, Sendable {
     public let newTerms: [String]
     /// How this text was produced; the pipeline copies it onto the record.
     public let mode: FormattingMode
-    /// Display name of the Prompt Mode target ("Claude"), nil unless mode == .prompt.
-    public let promptTarget: String?
 
     public init(text: String, newTerms: [String],
-                mode: FormattingMode = .formatted, promptTarget: String? = nil) {
+                mode: FormattingMode = .formatted) {
         self.text = text
         self.newTerms = newTerms
         self.mode = mode
-        self.promptTarget = promptTarget
     }
 }

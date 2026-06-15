@@ -23,7 +23,7 @@ import Foundation
     }
 
     @Test func testLegacyRecordWithoutModeDecodes() throws {
-        // history.json written before the mode/promptTarget fields existed.
+        // history.json written before the mode field existed.
         let legacy = """
         [{"id":"00000000-0000-0000-0000-000000000001","text":"old one",
           "createdAt":"2026-06-01T10:00:00Z","language":"en",
@@ -35,27 +35,41 @@ import Foundation
         #expect(all.count == 1)
         #expect(all.first?.text == "old one")
         #expect(all.first?.mode == nil)
-        #expect(all.first?.promptTarget == nil)
     }
 
-    @Test func testModeAndTargetRoundTrip() throws {
+    @Test func testLegacyPromptModeDecodesAsRaw() throws {
+        // Records written by the removed Prompt Mode carry mode "prompt"; the
+        // whole history must still load, mapping the dead mode to .raw rather than
+        // throwing and discarding every record.
+        let legacy = """
+        [{"id":"00000000-0000-0000-0000-000000000002","text":"old prompt",
+          "createdAt":"2026-06-01T10:00:00Z","language":"en",
+          "provider":"azure","durationSeconds":2.5,"mode":"prompt",
+          "promptTarget":"Claude"}]
+        """
+        try Data(legacy.utf8).write(to: fileURL)
+        let history = DictationHistory(fileURL: fileURL)
+        #expect(history.all().count == 1)
+        #expect(history.all().first?.text == "old prompt")
+        #expect(history.all().first?.mode == .raw)
+    }
+
+    @Test func testModeRoundTrip() throws {
         let history = DictationHistory(fileURL: fileURL)
         history.append(DictationRecord(
-            text: "optimized", createdAt: Date(timeIntervalSince1970: 1_000),
+            text: "cleaned", createdAt: Date(timeIntervalSince1970: 1_000),
             language: "en", provider: "azure", durationSeconds: 1,
-            mode: .prompt, promptTarget: "Claude"))
+            mode: .formatted))
         let reloaded = DictationHistory(fileURL: fileURL)
-        #expect(reloaded.all().first?.mode == .prompt)
-        #expect(reloaded.all().first?.promptTarget == "Claude")
+        #expect(reloaded.all().first?.mode == .formatted)
     }
 
-    @Test func testWithEstimatedCostPreservesModeAndTarget() {
+    @Test func testWithEstimatedCostPreservesMode() {
         let record = DictationRecord(
             text: "x", createdAt: Date(), language: nil, provider: "azure",
-            durationSeconds: 1, mode: .prompt, promptTarget: "GPT")
+            durationSeconds: 1, mode: .formatted)
         let updated = record.withEstimatedCost(0.01)
-        #expect(updated.mode == .prompt)
-        #expect(updated.promptTarget == "GPT")
+        #expect(updated.mode == .formatted)
     }
 
     @Test func testRoundTripPersists() throws {

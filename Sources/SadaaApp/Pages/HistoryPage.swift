@@ -310,13 +310,10 @@ private struct HistoryRow: View {
                 if let cost = record.estimatedCost {
                     capsule(PageFormat.dollars(cost), icon: "creditcard")
                 }
-                // Diagnosability: which pipeline produced this text. Prompt Mode
-                // shows its target; Raw flags pure transcription (deliberate or
-                // a formatter fallback). Plain formatted rows stay uncluttered.
-                if record.mode == .prompt {
-                    capsule("Prompt → \(record.promptTarget ?? "?")",
-                            icon: "wand.and.stars")
-                } else if record.mode == .raw {
+                // Diagnosability: which pipeline produced this text. Raw flags
+                // pure transcription (deliberate or a formatter fallback). Plain
+                // formatted rows stay uncluttered.
+                if record.mode == .raw {
                     capsule("Raw", icon: "doc.plaintext")
                 }
             }
