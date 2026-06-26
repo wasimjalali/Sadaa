@@ -11,7 +11,7 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .home: return "Home"
-        case .languageMemory: return "Language Memory"
+        case .languageMemory: return "Memory"
         case .scratchpad: return "Scratchpad"
         case .history: return "History"
         case .settings: return "Settings"
@@ -54,10 +54,14 @@ struct RootView: View {
     // MARK: - Sidebar
 
     private var sidebar: some View {
-        // Plain buttons, not List(selection:), so the selection is our own gold
-        // pill rather than the macOS system-accent highlight.
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             brand
+            Text("VOICE SYSTEM")
+                .font(.system(size: 10, weight: .semibold))
+                .foregroundStyle(Theme.gold.opacity(0.86))
+                .padding(.horizontal, 18)
+                .padding(.top, 10)
+                .padding(.bottom, 2)
             ForEach(SidebarSection.allCases) { section in
                 Button {
                     selection = section
@@ -69,26 +73,69 @@ struct RootView: View {
                     )
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 8)
+                .padding(.horizontal, 10)
             }
             Spacer(minLength: 0)
+            footer
         }
-        .frame(minWidth: 200, maxHeight: .infinity, alignment: .top)
-        .background(Theme.navy)
+        .frame(minWidth: 210, maxWidth: 210, maxHeight: .infinity, alignment: .top)
+        .background(
+            Rectangle()
+                .fill(Theme.navy800)
+                .overlay(alignment: .trailing) {
+                    Rectangle()
+                        .fill(Theme.gold.opacity(0.18))
+                        .frame(width: 1)
+                }
+        )
     }
 
     private var brand: some View {
-        HStack(spacing: 8) {
-            Image(systemName: "mic.fill")
-                .font(.system(size: 16, weight: .semibold))
-                .foregroundStyle(Theme.gold)
-            Text("Sadaa")
-                .font(.system(size: 20, weight: .bold))
-                .foregroundStyle(Theme.cream)
+        HStack(spacing: 10) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(Theme.gold)
+                    .frame(width: 34, height: 34)
+                Image(systemName: "waveform")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.navy800)
+            }
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Sadaa")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundStyle(Theme.white)
+                Text("AI Dictation")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(Theme.cream.opacity(0.68))
+            }
         }
         .padding(.horizontal, 18)
         .padding(.top, 18)
-        .padding(.bottom, 10)
+        .padding(.bottom, 12)
+    }
+
+    private var footer: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(spacing: 6) {
+                Circle()
+                    .fill(viewModel.hotkeyActive ? Theme.sage : Theme.gold)
+                    .frame(width: 7, height: 7)
+                Text(viewModel.hotkeyActive ? "Hotkeys active" : "Needs access")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.cream.opacity(0.78))
+            }
+            Text("Local-first voice workspace")
+                .font(.system(size: 10, weight: .medium))
+                .foregroundStyle(Theme.cream.opacity(0.48))
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Theme.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Theme.gold.opacity(0.14), lineWidth: 1)
+        )
+        .padding(12)
     }
 
     // MARK: - Detail

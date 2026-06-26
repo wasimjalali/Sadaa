@@ -13,4 +13,12 @@ enum Theme {
     static let creamSurface = rgb(0xFE, 0xFD, 0xFB)
     static let sage        = rgb(0x5B, 0x8A, 0x72)
     static let charcoal    = rgb(0x2D, 0x37, 0x48)
+    static let white       = Color.white
+    static let ink         = rgb(0x18, 0x24, 0x33)
+    static let muted       = rgb(0x6B, 0x73, 0x80)
+    static let line        = rgb(0xE6, 0xDD, 0xCD)
+    static let surface     = creamSurface
+    static let focus       = gold
+    static let warning     = rgb(0xB8, 0x71, 0x2C)
+    static let red         = rgb(0xB4, 0x23, 0x2F)
 }
