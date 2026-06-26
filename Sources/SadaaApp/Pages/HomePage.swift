@@ -31,89 +31,240 @@ enum PageFormat {
     }
 }
 
-/// The landing page: the mic control, today's activity, connection and language
-/// status, and a short list of the most recent dictations.
+/// Command-center home: readiness, live dictation state, today's usage,
+/// recent recovery actions, and Memory learning pulse.
 struct HomePage: View {
     @ObservedObject var viewModel: SadaaViewModel
 
+    @State private var correctionRecord: DictationRecord?
+    @State private var correctionObserved = ""
+    @State private var correctionCorrected = ""
+
     var body: some View {
         ScrollView {
-            VStack(spacing: 26) {
-                Spacer(minLength: 4)
-
-                MicButton(state: viewModel.dictationState) { viewModel.toggle() }
-
-                stateLine
-
-                if viewModel.canRetry {
-                    retryButton
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                }
-
-                todayStrip
-
-                readinessBadges
-
-                recentSection
-
-                Spacer(minLength: 4)
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                readinessStrip
+                primaryWorkspace
+                recentAndLearning
             }
-            .padding(32)
+            .padding(30)
+            .frame(maxWidth: 1120, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .top)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: viewModel.canRetry)
+            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: viewModel.canRetry)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.cream)
+        .sheet(item: $correctionRecord) { record in
+            correctionSheet(record)
+        }
     }
 
-    // MARK: - State line
+    private var header: some View {
+        CommandPageHeader(
+            eyebrow: "Local AI voice layer",
+            title: "Command Center",
+            subtitle: "Dictate, recover, and teach Sadaa your AI-specialist vocabulary from one calm cockpit."
+        ) {
+            HStack(spacing: 8) {
+                PremiumStatusBadge(
+                    icon: "globe",
+                    text: PageFormat.languageLabel(viewModel.languagePin),
+                    tint: Theme.navy
+                )
+                PremiumStatusBadge(
+                    icon: viewModel.hotkeyActive ? "keyboard.fill" : "keyboard",
+                    text: viewModel.hotkeyActive ? "Hotkeys active" : "Grant access",
+                    tint: viewModel.hotkeyActive ? Theme.sage : Theme.gold
+                )
+            }
+        }
+    }
 
-    private var stateLine: some View {
-        Text(stateText)
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(stateColor)
-            .multilineTextAlignment(.center)
-            .frame(maxWidth: 360)
-            .contentTransition(.opacity)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: stateText)
-            .id(stateText)
-            .transition(.opacity.combined(with: .move(edge: .bottom)))
+    private var readinessStrip: some View {
+        CommandPanel {
+            HStack(spacing: 10) {
+                readinessBadge(
+                    icon: viewModel.azureConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
+                    title: viewModel.azureConfigured ? "Azure ready" : "Azure setup needed",
+                    detail: viewModel.azureConfigured ? "Transcription endpoint configured" : "Add endpoint, deployment, and key",
+                    tint: viewModel.azureConfigured ? Theme.sage : Theme.gold
+                )
+                readinessBadge(
+                    icon: "text.book.closed.fill",
+                    title: "\(viewModel.languageMemory.terms.count) terms",
+                    detail: "\(viewModel.languageMemory.replacements.count) corrections, \(viewModel.languageMemory.snippets.count) snippets",
+                    tint: Theme.navy
+                )
+                readinessBadge(
+                    icon: "chart.bar.fill",
+                    title: PageFormat.minutes(viewModel.monthlyCost.minutes),
+                    detail: "\(PageFormat.dollars(viewModel.monthlyCost.cost)) estimated this month",
+                    tint: Theme.gold
+                )
+            }
+        }
+    }
+
+    private func readinessBadge(icon: String, title: String, detail: String, tint: Color) -> some View {
+        HStack(spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(tint)
+                .frame(width: 24)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 13, weight: .bold))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(tint.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var primaryWorkspace: some View {
+        HStack(alignment: .top, spacing: 18) {
+            CommandPanel("Voice", icon: "waveform") {
+                VStack(spacing: 16) {
+                    MicButton(state: viewModel.dictationState) { viewModel.toggle() }
+                        .padding(.top, 6)
+                    Text(stateText)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(stateTint)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 360)
+                    if viewModel.canRetry {
+                        Button {
+                            viewModel.retry()
+                        } label: {
+                            Label("Retry retained audio", systemImage: "arrow.clockwise")
+                                .font(.system(size: 13, weight: .semibold))
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.navy)
+                    }
+                }
+                .frame(maxWidth: .infinity, minHeight: 290)
+            }
+            .frame(maxWidth: 450)
+
+            CommandPanel("Today", icon: "calendar") {
+                VStack(spacing: 10) {
+                    HStack(spacing: 10) {
+                        CommandMetric(icon: "waveform", value: "\(todayCount)", label: todayCount == 1 ? "dictation" : "dictations", tint: Theme.navy)
+                        CommandMetric(icon: "clock", value: String(format: "%.1f", todayMinutes), label: "minutes", tint: Theme.gold)
+                    }
+                    HStack(spacing: 10) {
+                        CommandMetric(icon: "textformat", value: "\(todayWords)", label: "words", tint: Theme.sage)
+                        CommandMetric(icon: "sparkles", value: "\(todayMemoryEvents)", label: "memory events", tint: Theme.navy)
+                    }
+                    Divider()
+                    VStack(alignment: .leading, spacing: 8) {
+                        Text("Model posture")
+                            .font(.system(size: 12, weight: .bold))
+                            .foregroundStyle(Theme.navy)
+                        Text("Fast Azure transcription, local deterministic Memory, optional GPT cleanup.")
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    Spacer(minLength: 0)
+                }
+                .frame(minHeight: 290)
+            }
+        }
+    }
+
+    private var recentAndLearning: some View {
+        HStack(alignment: .top, spacing: 18) {
+            recentPanel
+                .frame(maxWidth: .infinity)
+            learningPulsePanel
+                .frame(width: 330)
+        }
+    }
+
+    private var recentPanel: some View {
+        CommandPanel("Recent dictations", icon: "clock.arrow.circlepath") {
+            if viewModel.recent.isEmpty {
+                CommandEmptyState(
+                    icon: "text.bubble",
+                    title: "No dictations yet",
+                    detail: "Your newest transcripts will appear here with copy, note, learn, and reprocess actions."
+                )
+            } else {
+                VStack(spacing: 10) {
+                    ForEach(viewModel.recent.prefix(5)) { record in
+                        RecentCommandRow(
+                            record: record,
+                            onCopy: { copy(record.text) },
+                            onSendToScratchpad: { viewModel.sendToScratchpad(record) },
+                            onLearn: { beginCorrection(record) },
+                            onReprocess: { viewModel.reprocessHistoryWithLanguageMemory(record) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var learningPulsePanel: some View {
+        CommandPanel("Learning Pulse", icon: "sparkles") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 8) {
+                    CommandMetric(
+                        icon: "lightbulb.fill",
+                        value: "\(viewModel.languageMemory.suggestions.count)",
+                        label: "queued",
+                        tint: Theme.gold
+                    )
+                }
+                if viewModel.languageMemory.suggestions.isEmpty {
+                    Text("Corrections and new technical terms will surface here as Sadaa learns from formatting, history, and your edits.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                } else {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(viewModel.languageMemory.suggestions.prefix(4)) { suggestion in
+                            LearningPulseRow(suggestion: suggestion)
+                        }
+                    }
+                }
+            }
+        }
     }
 
     private var stateText: String {
         switch viewModel.dictationState {
-        case .idle: return "Tap your hotkey or click to dictate"
-        case .recording: return "Listening... Esc cancels"
-        case .transcribing: return "Transcribing..."
-        case .delivering: return "Inserting..."
+        case .idle: return "Tap your hotkey or click the mic to dictate."
+        case .recording: return "Listening. Press Esc to cancel."
+        case .transcribing: return "Transcribing with Azure."
+        case .delivering: return "Inserting at your cursor."
         case .error(let message): return message
         }
     }
 
-    private var stateColor: Color {
+    private var stateTint: Color {
         switch viewModel.dictationState {
         case .recording: return Theme.sage
-        case .error: return Color.red.opacity(0.85)
-        default: return Theme.charcoal.opacity(0.7)
+        case .transcribing, .delivering: return Theme.gold
+        case .error: return Theme.red
+        case .idle: return Theme.muted
         }
     }
 
-    // MARK: - Retry
-
-    private var retryButton: some View {
-        Button {
-            viewModel.retry()
-        } label: {
-            Label("Retry last dictation", systemImage: "arrow.clockwise")
-                .font(.system(size: 13, weight: .medium))
-        }
-        .buttonStyle(HomePressableButtonStyle())
-        .tint(Theme.navy)
-    }
-
-    // MARK: - Today strip
-
-    /// Records created since midnight today. Gated on `recent.count` so a new
-    /// dictation re-renders these chips.
     private var todayRecords: [DictationRecord] {
         _ = viewModel.recent.count
         let start = Calendar.current.startOfDay(for: Date())
@@ -132,240 +283,186 @@ struct HomePage: View {
         }
     }
 
-    private var todayStrip: some View {
-        HStack(spacing: 12) {
-            StatChip(icon: "waveform", value: "\(todayCount)", label: todayCount == 1 ? "dictation" : "dictations")
-            StatChip(icon: "clock", value: String(format: "%.1f", todayMinutes), label: "minutes")
-            StatChip(icon: "textformat", value: "\(todayWords)", label: "words")
+    private var todayMemoryEvents: Int {
+        todayRecords.reduce(0) { sum, record in
+            sum + (record.memoryHitIDs?.count ?? 0)
+                + (record.replacementRuleIDs?.count ?? 0)
+                + (record.snippetIDs?.count ?? 0)
         }
-        .frame(maxWidth: 520)
-    }
-
-    // MARK: - Status chips
-
-    private var readinessBadges: some View {
-        HStack(spacing: 8) {
-            PremiumStatusBadge(
-                icon: viewModel.azureConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
-                text: viewModel.azureConfigured ? "Azure ready" : "Azure setup needed",
-                tint: viewModel.azureConfigured ? Theme.sage : Theme.gold
-            )
-            PremiumStatusBadge(
-                icon: "globe",
-                text: PageFormat.languageLabel(viewModel.languagePin),
-                tint: Theme.navy
-            )
-            PremiumStatusBadge(
-                icon: viewModel.hotkeyActive ? "keyboard.fill" : "keyboard",
-                text: viewModel.hotkeyActive ? "Hotkeys active" : "Grant Accessibility",
-                tint: viewModel.hotkeyActive ? Theme.sage : Theme.gold
-            )
-            PremiumStatusBadge(
-                icon: "text.book.closed",
-                text: "\(viewModel.languageMemory.terms.count) memory terms",
-                tint: Theme.navy
-            )
-        }
-        .frame(maxWidth: 520)
-    }
-
-    // MARK: - Recent
-
-    private var recentSection: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            Text("Recent")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(Theme.charcoal.opacity(0.7))
-
-            if viewModel.recent.isEmpty {
-                emptyRecent
-            } else {
-                VStack(spacing: 8) {
-                    ForEach(viewModel.recent.prefix(5)) { record in
-                        RecentRow(record: record)
-                    }
-                }
-            }
-        }
-        .frame(maxWidth: 520, alignment: .leading)
-    }
-
-    private var emptyRecent: some View {
-        VStack(spacing: 10) {
-            Image(systemName: "text.bubble")
-                .font(.system(size: 30))
-                .foregroundStyle(Theme.gold300)
-            Text("Your dictations will show up here.")
-                .font(.system(size: 13))
-                .foregroundStyle(Theme.charcoal.opacity(0.6))
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 28)
-    }
-}
-
-// MARK: - Stat chip
-
-/// A small page-local activity chip with an icon and a number that animates on
-/// change.
-private struct StatChip: View {
-    let icon: String
-    let value: String
-    let label: String
-
-    var body: some View {
-        HStack(spacing: 10) {
-            Image(systemName: icon)
-                .font(.system(size: 15, weight: .medium))
-                .foregroundStyle(Theme.gold)
-            VStack(alignment: .leading, spacing: 1) {
-                Text(value)
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundStyle(Theme.charcoal)
-                    .contentTransition(.numericText())
-                    .animation(.spring(response: 0.3, dampingFraction: 0.8), value: value)
-                Text(label)
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.charcoal.opacity(0.55))
-            }
-        }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 11)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(
-            RoundedRectangle(cornerRadius: 12)
-                .fill(Theme.creamSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
-        )
-    }
-}
-
-// MARK: - Status capsule
-
-/// A compact status pill. Shows either a colored status dot or a leading icon.
-private struct StatusCapsule: View {
-    var dotColor: Color?
-    var icon: String?
-    let text: String
-
-    init(dotColor: Color? = nil, icon: String? = nil, text: String) {
-        self.dotColor = dotColor
-        self.icon = icon
-        self.text = text
-    }
-
-    var body: some View {
-        HStack(spacing: 7) {
-            if let dotColor {
-                Circle()
-                    .fill(dotColor)
-                    .frame(width: 8, height: 8)
-            } else if let icon {
-                Image(systemName: icon)
-                    .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.55))
-            }
-            Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.charcoal.opacity(0.8))
-        }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 7)
-        .background(
-            Capsule()
-                .fill(Theme.creamSurface)
-        )
-        .overlay(
-            Capsule()
-                .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
-        )
-    }
-}
-
-// MARK: - Recent row
-
-/// A single recent-dictation row with hover highlight, a leading gold accent
-/// bar on hover and a Copy button that morphs to a sage checkmark.
-private struct RecentRow: View {
-    let record: DictationRecord
-
-    @State private var hovering = false
-    @State private var copied = false
-
-    var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            RoundedRectangle(cornerRadius: 2)
-                .fill(Theme.gold)
-                .frame(width: 3)
-                .opacity(hovering ? 1 : 0)
-
-            VStack(alignment: .leading, spacing: 4) {
-                Text(record.text)
-                    .font(.system(size: 13))
-                    .foregroundStyle(Theme.charcoal)
-                    .lineLimit(2)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .textSelection(.enabled)
-                Text(PageFormat.relativeTime(record.createdAt))
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.charcoal.opacity(0.5))
-            }
-
-            copyButton
-        }
-        .padding(12)
-        .background(
-            RoundedRectangle(cornerRadius: 10)
-                .fill(hovering ? Theme.cream : Theme.creamSurface)
-        )
-        .overlay(
-            RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Theme.gold.opacity(hovering ? 0.4 : 0.18), lineWidth: 1)
-        )
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
-        .onHover { hovering = $0 }
-    }
-
-    private var copyButton: some View {
-        Button {
-            copy(record.text)
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { copied = true }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) { copied = false }
-            }
-        } label: {
-            HStack(spacing: 4) {
-                Image(systemName: copied ? "checkmark" : "doc.on.doc")
-                    .font(.system(size: 11, weight: .semibold))
-                    .symbolEffect(.bounce, value: copied)
-                Text(copied ? "Copied" : "Copy")
-                    .font(.system(size: 12, weight: .medium))
-                    .contentTransition(.opacity)
-            }
-            .foregroundStyle(copied ? Theme.sage : Theme.navy)
-        }
-        .buttonStyle(HomePressableButtonStyle())
     }
 
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
     }
+
+    private func beginCorrection(_ record: DictationRecord) {
+        correctionObserved = record.rawText ?? record.text
+        correctionCorrected = record.text
+        correctionRecord = record
+    }
+
+    private func correctionSheet(_ record: DictationRecord) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            CommandPageHeader(
+                eyebrow: "Memory",
+                title: "Learn Correction",
+                subtitle: "Teach Sadaa once so this wording is handled deterministically next time."
+            )
+            TextField("Heard", text: $correctionObserved)
+                .textFieldStyle(.roundedBorder)
+            TextField("Write", text: $correctionCorrected)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    correctionRecord = nil
+                }
+                Button("Save to Memory") {
+                    viewModel.languageMemory.learnCorrection(
+                        observed: correctionObserved,
+                        corrected: correctionCorrected
+                    )
+                    correctionRecord = nil
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.navy)
+                .disabled(correctionObserved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          correctionCorrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .frame(width: 480)
+        .background(Theme.cream)
+    }
 }
 
-// MARK: - Button style
+private struct RecentCommandRow: View {
+    let record: DictationRecord
+    let onCopy: () -> Void
+    let onSendToScratchpad: () -> Void
+    let onLearn: () -> Void
+    let onReprocess: () -> Void
 
-/// A borderless button style with a pressed-scale and pointing-hand cursor.
-private struct HomePressableButtonStyle: ButtonStyle {
-    func makeBody(configuration: Configuration) -> some View {
-        configuration.label
-            .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: configuration.isPressed)
-            .onHover { inside in
-                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+    @State private var hovering = false
+    @State private var copied = false
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            VStack(alignment: .leading, spacing: 8) {
+                Text(record.text)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(3)
+                    .textSelection(.enabled)
+                HStack(spacing: 8) {
+                    metadata(icon: "clock", text: PageFormat.relativeTime(record.createdAt))
+                    metadata(icon: "waveform", text: record.provider)
+                    if memoryCount > 0 {
+                        metadata(icon: "sparkles", text: "\(memoryCount) memory")
+                    }
+                }
             }
+            Spacer(minLength: 10)
+            HStack(spacing: 6) {
+                actionButton(copied ? "checkmark" : "doc.on.doc", copied ? "Copied" : "Copy") {
+                    onCopy()
+                    copied = true
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) { copied = false }
+                }
+                actionButton("note.text", "Send to Scratchpad", onSendToScratchpad)
+                actionButton("graduationcap", "Learn correction", onLearn)
+                actionButton("arrow.clockwise", "Reprocess", onReprocess)
+            }
+        }
+        .padding(13)
+        .background(hovering ? Theme.cream : Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(hovering ? Theme.gold.opacity(0.42) : Theme.line, lineWidth: 1)
+        )
+        .onHover { hovering = $0 }
+        .animation(.spring(response: 0.25, dampingFraction: 0.86), value: hovering)
+        .animation(.spring(response: 0.25, dampingFraction: 0.86), value: copied)
+    }
+
+    private var memoryCount: Int {
+        (record.memoryHitIDs?.count ?? 0)
+            + (record.replacementRuleIDs?.count ?? 0)
+            + (record.snippetIDs?.count ?? 0)
+    }
+
+    private func metadata(icon: String, text: String) -> some View {
+        HStack(spacing: 4) {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text(text)
+                .lineLimit(1)
+        }
+        .font(.system(size: 11, weight: .medium))
+        .foregroundStyle(Theme.muted)
+    }
+
+    private func actionButton(_ icon: String, _ title: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .frame(width: 28, height: 28)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(title == "Copied" ? Theme.sage : Theme.navy)
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 7))
+        .overlay(
+            RoundedRectangle(cornerRadius: 7)
+                .strokeBorder(Theme.navy.opacity(0.18), lineWidth: 1)
+        )
+        .help(title)
+    }
+}
+
+private struct LearningPulseRow: View {
+    let suggestion: MemorySuggestion
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 8) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.gold)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 3) {
+                Text(suggestion.proposed)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.ink)
+                    .lineLimit(1)
+                Text("\(suggestion.evidenceCount) observations from \(sourceTitle)")
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(10)
+        .background(Theme.gold.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
+        )
+    }
+
+    private var icon: String {
+        switch suggestion.kind {
+        case .term: return "textformat"
+        case .replacement: return "arrow.left.arrow.right"
+        case .snippetCandidate: return "text.badge.plus"
+        }
+    }
+
+    private var sourceTitle: String {
+        switch suggestion.source {
+        case .formatter: return "formatter"
+        case .historyCorrection: return "history"
+        case .manualImport: return "import"
+        case .reprocess: return "reprocess"
+        }
     }
 }
