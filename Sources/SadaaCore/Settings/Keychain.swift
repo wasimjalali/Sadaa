@@ -53,6 +53,24 @@ public enum Keychain {
         return String(data: data, encoding: .utf8)
     }
 
+    /// True if an item exists for `account`, WITHOUT returning (decrypting) its
+    /// data. This matters on the main thread: get(), with kSecReturnData, can
+    /// make securityd put up a keychain authorization prompt that blocks the
+    /// caller until the user answers it (which happens after a re-signed
+    /// reinstall). An existence check decrypts nothing, so it never prompts and
+    /// is safe to call at launch to decide whether a provider is configured.
+    public static func exists(account: String) -> Bool {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecReturnData as String: false,
+        ]
+        var result: AnyObject?
+        return SecItemCopyMatching(query as CFDictionary, &result) == errSecSuccess
+    }
+
     public static func delete(account: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,

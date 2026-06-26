@@ -25,6 +25,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var controller: DictationController?
     private var voiceEditController: VoiceEditController?
     private var recordingTimer: Timer?
+    /// When the current recording began, so the pill can show elapsed mm:ss.
+    private var recordingStartedAt: Date?
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
     /// A fallback notice (formatter offline) to surface once the dictation
@@ -546,6 +548,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 pendingDeliveryNotice = nil
                 hud.show(.error(notice))
                 hud.hide(after: 4)
+            } else if lastDictationState == .delivering {
+                // A dictation just landed: flash a brief success confirmation
+                // before the pill fades out, the way WhisperFlow and friends do.
+                hud.show(.done)
+                hud.hide(after: 1.0)
             } else {
                 hud.hide(after: 0.4)
             }
@@ -594,16 +601,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func startRecordingTimer() {
+        recordingStartedAt = Date()
         hud.show(.recording(seconds: 0, level: 0))
         // Push the live mic level at ~30Hz so the wave's amplitude tracks speech
         // promptly (the bars ripple continuously on their own via TimelineView;
-        // this keeps the loudness envelope responsive). The seconds field is no
-        // longer shown in the recording pill, so it stays 0.
+        // this keeps the loudness envelope responsive). The seconds field drives
+        // the pill's elapsed mm:ss, recomputed from the start time each tick.
         recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
                                               repeats: true) { [weak self] _ in
             MainActor.assumeIsolated {
                 guard let self else { return }
-                self.hud.show(.recording(seconds: 0, level: self.currentLevel))
+                let elapsed = Int(Date().timeIntervalSince(self.recordingStartedAt ?? Date()))
+                self.hud.show(.recording(seconds: elapsed, level: self.currentLevel))
             }
         }
     }
@@ -611,6 +620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private func stopRecordingTimer() {
         recordingTimer?.invalidate()
         recordingTimer = nil
+        recordingStartedAt = nil
     }
 
     private func setIcon(_ symbol: String, tint: NSColor?) {

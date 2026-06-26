@@ -71,10 +71,15 @@ final class SadaaViewModel: ObservableObject {
     }
 
     func refreshConfig() {
+        // exists() not get(): refreshConfig runs on the main thread (init, and
+        // after every settings/language change), and get() can trigger a
+        // blocking keychain authorization prompt that freezes the app, and with
+        // it the HUD. An existence check is all "configured?" needs and never
+        // prompts. See Keychain.exists.
         azureConfigured =
             !settings.azureEndpoint.isEmpty &&
             !settings.azureDeployment.isEmpty &&
-            (Keychain.get(account: "azure-openai-key")?.isEmpty == false)
+            Keychain.exists(account: "azure-openai-key")
         languagePin = settings.languagePin
         hotkeyKeycode = settings.hotkeyKeycode
         voiceEditKeycode = settings.voiceEditKeycode
