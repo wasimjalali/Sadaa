@@ -222,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.viewModel?.refreshRecent()
                 self.viewModel?.refreshCost()
             },
-            format: { [settings, languageMemory] raw, ctx in
+            format: { [weak self, settings, languageMemory] raw, ctx in
                 let memory = languageMemory.snapshot()
                 let memoryLanguage = MemoryLanguage(languagePin: ctx.language)
                 let prepared = LanguageMemoryPostProcessor.applyDeterministic(
@@ -237,12 +237,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let formatter = Self.buildFormatter(settings: settings) else {
                     return LanguageMemoryPostProcessor.rawResult(from: prepared)
                 }
-                let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
-                return LanguageMemoryPostProcessor.formattedResult(
-                    prepared: prepared,
-                    formatted: formatted,
-                    snapshot: memory,
-                    language: memoryLanguage)
+                do {
+                    let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
+                    return LanguageMemoryPostProcessor.formattedResult(
+                        prepared: prepared,
+                        formatted: formatted,
+                        snapshot: memory,
+                        language: memoryLanguage)
+                } catch {
+                    self?.pendingDeliveryNotice = "Formatter unavailable: \(Self.describeFormatterError(error))"
+                    throw error
+                }
             },
             rawTransform: { [languageMemory] raw, ctx in
                 LanguageMemoryPostProcessor.rawResult(
@@ -270,7 +275,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.viewModel?.refreshLanguageMemory()
             },
             formatterUnavailable: { [weak self] in
-                self?.pendingDeliveryNotice = "Inserted Memory-cleaned text; formatter unavailable."
+                guard let self else { return }
+                if self.pendingDeliveryNotice == nil {
+                    self.pendingDeliveryNotice = "Inserted Memory-cleaned text; formatter unavailable."
+                }
             },
             isSecureInputActive: { IsSecureEventInputEnabled() }
         )
@@ -655,6 +663,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .transport(let urlError):
             return urlError.localizedDescription
         }
+    }
+
+    private static func describeFormatterError(_ error: Error) -> String {
+        String(FormatterHealthCheck.describe(error).prefix(160))
     }
 
     private func startHotkeys() {

@@ -61,6 +61,9 @@ public enum FormattingPromptBuilder {
         lines.append("")
         lines.append("# Output format")
         lines.append("Respond ONLY with a JSON object of the form {\"text\": \"<the cleaned text>\", \"newTerms\": [\"<unusual proper noun or jargon you had to guess>\"]}. newTerms holds at most 3 entries and is [] when there is nothing unusual. Do not wrap the JSON in markdown.")
+        lines.append("- The text field must never be empty. If cleanup cannot improve the transcript, return the original transcript text.")
+        lines.append("- newTerms is only for proper nouns, product names, names, acronyms, or domain jargon that were actually present in the transcript and may be useful to remember.")
+        lines.append("- No markdown fences, no commentary, no explanation, and no keys other than text and newTerms.")
 
         return lines.joined(separator: "\n")
     }

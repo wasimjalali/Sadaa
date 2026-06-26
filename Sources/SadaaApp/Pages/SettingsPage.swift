@@ -28,6 +28,7 @@ struct SettingsPage: View {
     @State private var micGranted = false
     @State private var axTrusted = false
     @State private var providerHealth: ProviderHealthResult?
+    @State private var formatterHealth: ProviderHealthResult?
     @State private var saved = false
     @State private var rateError = ""
 
@@ -238,7 +239,33 @@ struct SettingsPage: View {
                 }
             }
 
-            settingsField("GPT formatting deployment", "gpt-4o-mini", $gptDeployment)
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
+                settingsField("GPT formatting deployment", "gpt-4o-mini", $gptDeployment)
+
+                VStack(alignment: .leading, spacing: 7) {
+                    Text("Formatter status")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.muted)
+                    if let formatterHealth {
+                        PremiumStatusBadge(
+                            icon: formatterHealth.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                            text: formatterHealth.ok ? "Connected" : "Unavailable",
+                            tint: formatterHealth.ok ? Theme.sage : Theme.warning
+                        )
+                        Text("\(formatterHealth.providerName): \(formatterHealth.message)")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(formatterHealth.ok ? Theme.sage : Theme.warning)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    } else {
+                        PremiumStatusBadge(icon: "sparkles", text: "Checked by Test Azure", tint: Theme.navy)
+                        Text("Uses the endpoint, API version, key, and GPT deployment above.")
+                            .font(.system(size: 11, weight: .medium))
+                            .foregroundStyle(Theme.muted)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
 
             VStack(alignment: .leading, spacing: 8) {
                 Text("Speaker context")
@@ -521,6 +548,7 @@ struct SettingsPage: View {
         formatterRate = String(settings.formatterRatePer1kChars)
         launchAtLogin = LoginItem.isEnabled
         soundEffects = settings.soundEffectsEnabled
+        formatterHealth = nil
         refreshPermissions()
     }
 
@@ -591,6 +619,8 @@ struct SettingsPage: View {
         let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
         let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
 
+        checkFormatterConfiguration()
+
         guard !trimmedEndpoint.isEmpty, !trimmedDeployment.isEmpty, !trimmedKey.isEmpty else {
             providerHealth = ProviderHealthCheck.result(
                 providerName: "Azure OpenAI",
@@ -645,6 +675,73 @@ struct SettingsPage: View {
             )
             await MainActor.run {
                 providerHealth = result
+            }
+        }
+    }
+
+    private func checkFormatterConfiguration() {
+        let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard formattingEnabled else {
+            formatterHealth = ProviderHealthCheck.result(
+                providerName: "Azure GPT",
+                endpoint: trimmedEndpoint,
+                ok: false,
+                startedAt: Date(),
+                finishedAt: Date(),
+                message: "smart formatting is off"
+            )
+            return
+        }
+
+        guard !trimmedEndpoint.isEmpty, !trimmedDeployment.isEmpty, !trimmedKey.isEmpty else {
+            formatterHealth = ProviderHealthCheck.result(
+                providerName: "Azure GPT",
+                endpoint: trimmedEndpoint,
+                ok: false,
+                startedAt: Date(),
+                finishedAt: Date(),
+                message: "missing endpoint, GPT deployment, or key"
+            )
+            return
+        }
+
+        guard let endpointURL = URL(string: trimmedEndpoint), endpointURL.host != nil else {
+            formatterHealth = ProviderHealthCheck.result(
+                providerName: "Azure GPT",
+                endpoint: trimmedEndpoint,
+                ok: false,
+                startedAt: Date(),
+                finishedAt: Date(),
+                message: "invalid endpoint URL"
+            )
+            return
+        }
+
+        let formatter = AzureChatFormatter(config: .init(
+            endpoint: endpointURL,
+            apiKey: trimmedKey,
+            deployment: trimmedDeployment,
+            apiVersion: trimmedAPIVersion.isEmpty ? settings.azureAPIVersion : trimmedAPIVersion
+        ))
+        formatterHealth = ProviderHealthResult(
+            providerName: "Azure GPT",
+            ok: false,
+            latencyMilliseconds: nil,
+            message: "testing formatter...",
+            redactedEndpoint: ProviderHealthCheck.redactedEndpoint(trimmedEndpoint)
+        )
+
+        Task {
+            let result = await FormatterHealthCheck.check(
+                formatter: formatter,
+                endpoint: trimmedEndpoint
+            )
+            await MainActor.run {
+                formatterHealth = result
             }
         }
     }
