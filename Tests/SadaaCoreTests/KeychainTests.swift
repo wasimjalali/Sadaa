@@ -18,4 +18,15 @@ import Foundation
         Keychain.delete(account: account)
         #expect(Keychain.get(account: account) == nil)
     }
+
+    @Test func testExistsTracksPresenceWithoutReturningData() throws {
+        defer { Keychain.delete(account: account) }
+
+        Keychain.delete(account: account)
+        #expect(Keychain.exists(account: account) == false)
+        try Keychain.set("sk-secret-123", account: account)
+        #expect(Keychain.exists(account: account) == true)
+        Keychain.delete(account: account)
+        #expect(Keychain.exists(account: account) == false)
+    }
 }
