@@ -19,9 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private let mainWindow = MainWindowController()
     private var viewModel: SadaaViewModel?
     private var history: DictationHistory?
-    private var dictionary: DictionaryStore?
-    private var snippets: SnippetStore?
-    private var notes: NotesStore?
+    private var languageMemory: LanguageMemoryStore?
+    private var scratchpad: ScratchpadStore?
     private var controller: DictationController?
     private var voiceEditController: VoiceEditController?
     private var recordingTimer: Timer?
@@ -109,7 +108,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Sadaa is an accessory app, so no menu bar is visible, but AppKit still
     /// routes key equivalents through NSApp.mainMenu. Without an Edit menu,
     /// Cmd-V (the user's or TextInserter's synthetic one) dies inside Sadaa's
-    /// own windows, so dictating into the Notes page lost the text.
+    /// own windows, so dictating into the Scratchpad lost the text.
     private func installMainMenu() {
         let mainMenu = NSMenu()
 
@@ -163,24 +162,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             fileURL: sadaaDir.appendingPathComponent("history.json"))
         self.history = history
 
-        let dictionary = DictionaryStore(
-            fileURL: sadaaDir.appendingPathComponent("dictionary.json"))
-        self.dictionary = dictionary
+        let languageMemory = LanguageMemoryMigrator.migrateIfNeeded(
+            memoryURL: sadaaDir.appendingPathComponent("language-memory.json"),
+            dictionaryURL: sadaaDir.appendingPathComponent("dictionary.json"),
+            snippetsURL: sadaaDir.appendingPathComponent("snippets.json"))
+        self.languageMemory = languageMemory
 
-        let snippets = SnippetStore(
-            fileURL: sadaaDir.appendingPathComponent("snippets.json"))
-        self.snippets = snippets
-
-        let notes = NotesStore(
-            fileURL: sadaaDir.appendingPathComponent("notes.json"))
-        self.notes = notes
+        let scratchpad = ScratchpadMigrator.migrateIfNeeded(
+            scratchpadURL: sadaaDir.appendingPathComponent("scratchpad.json"),
+            notesURL: sadaaDir.appendingPathComponent("notes.json"))
+        self.scratchpad = scratchpad
 
         let viewModel = SadaaViewModel(
             settings: settings,
             history: history,
-            dictionary: dictionary,
-            snippets: snippets,
-            notes: notes,
+            languageMemory: languageMemory,
+            scratchpad: scratchpad,
             onToggle: { [weak self] in self?.toggleDictation() })
         self.viewModel = viewModel
 
@@ -188,9 +185,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             recorder: recorder,
             providers: { [settings] in Self.buildProviders(settings: settings) },
             store: store,
-            hint: { [settings, dictionary] in
-                TranscriptionHint(languagePin: settings.languagePin,
-                                  dictionaryWords: dictionary.biasList(budget: 50))
+            hint: { [settings, languageMemory] in
+                let memory = languageMemory.snapshot()
+                return TranscriptionHint(languagePin: settings.languagePin,
+                                  dictionaryWords: MemoryBiasBuilder.biasList(
+                                    terms: memory.terms,
+                                    baseVocabulary: BaseVocabulary.terms,
+                                    budget: 50,
+                                    language: MemoryLanguage(languagePin: settings.languagePin)))
             },
             recordingsToKeep: settings.recordingsToKeep,
             deliver: { [weak self] text, done in
@@ -209,32 +211,63 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                     transcriptionRatePerMinute: self.settings.transcriptionRatePerMinute,
                     characters: record.text.count,
                     formatterRatePer1kChars: self.settings.formatterRatePer1kChars)
-                self.history?.append(record.withEstimatedCost(cost))
+                let storedRecord = record.withEstimatedCost(cost)
+                self.languageMemory?.recordUsage(
+                    termIDs: storedRecord.memoryHitIDs ?? [],
+                    replacementRuleIDs: storedRecord.replacementRuleIDs ?? [],
+                    snippetIDs: storedRecord.snippetIDs ?? []
+                )
+                self.history?.append(storedRecord)
+                self.viewModel?.refreshLanguageMemory()
                 self.viewModel?.refreshRecent()
                 self.viewModel?.refreshCost()
             },
-            format: { [settings] raw, ctx in
+            format: { [settings, languageMemory] raw, ctx in
+                let memory = languageMemory.snapshot()
+                let memoryLanguage = MemoryLanguage(languagePin: ctx.language)
+                let prepared = LanguageMemoryPostProcessor.applyDeterministic(
+                    to: raw,
+                    snapshot: memory,
+                    language: memoryLanguage)
                 // Rebuilt per dictation so toggling formatting or editing the
                 // GPT deployment applies immediately, with no relaunch. Smart
                 // formatting is the master switch: when it's off or no GPT
                 // deployment is set, buildFormatter returns nil and we hand back
                 // the raw text unchanged, so no GPT ever touches the dictation.
                 guard let formatter = Self.buildFormatter(settings: settings) else {
-                    return FormattingResult(text: raw, newTerms: [], mode: .raw)
+                    return LanguageMemoryPostProcessor.rawResult(from: prepared)
                 }
-                return try await formatter.format(rawTranscript: raw, context: ctx)
+                let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
+                return LanguageMemoryPostProcessor.formattedResult(
+                    prepared: prepared,
+                    formatted: formatted,
+                    snapshot: memory,
+                    language: memoryLanguage)
             },
-            context: { [settings, dictionary, snippets] in
-                FormattingContext(
+            rawTransform: { [languageMemory] raw, ctx in
+                LanguageMemoryPostProcessor.rawResult(
+                    for: raw,
+                    snapshot: languageMemory.snapshot(),
+                    language: MemoryLanguage(languagePin: ctx.language)
+                )
+            },
+            context: { [settings, languageMemory] in
+                let memory = languageMemory.snapshot()
+                return FormattingContext(
                     appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-                    dictionaryWords: dictionary.biasList(budget: 50),
+                    dictionaryWords: MemoryBiasBuilder.biasList(
+                        terms: memory.terms,
+                        baseVocabulary: BaseVocabulary.terms,
+                        budget: 50,
+                        language: MemoryLanguage(languagePin: settings.languagePin)),
                     speakerContext: settings.speakerContext,
                     language: settings.languagePin,
-                    snippets: snippets.all())
+                    snippets: Self.snippets(from: memory),
+                    replacementRules: memory.replacements)
             },
             suggestTerms: { [weak self] terms in
-                self?.dictionary?.suggest(terms)
-                self?.viewModel?.refreshDictionary()
+                self?.languageMemory?.suggest(terms)
+                self?.viewModel?.refreshLanguageMemory()
             },
             formatterFellBack: { [weak self] in
                 self?.pendingDeliveryNotice = "Inserted raw text (formatter offline)."
@@ -260,21 +293,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             }
             self.controller?.retryLast()
         }
+        viewModel.onReprocessHistory = { [weak self] record in
+            self?.reprocessHistory(record)
+        }
         self.controller = controller
 
         // Voice edit gets its own recordings folder so its retention never
         // competes with dictation's.
         let voiceEditStore = (try? RecordingStore(
             directory: sadaaDir.appendingPathComponent("VoiceEditRecordings"))) ?? store
-        setUpVoiceEdit(store: voiceEditStore, dictionary: dictionary, snippets: snippets)
+        setUpVoiceEdit(store: voiceEditStore, languageMemory: languageMemory)
     }
 
     /// Voice edit gets its own recorder so it never fights the dictation flow.
     /// The formatter is resolved per use so configuring GPT later works without
     /// a relaunch; the rewrite throws a clear error when it is not configured.
     private func setUpVoiceEdit(store: RecordingStore,
-                                dictionary: DictionaryStore,
-                                snippets: SnippetStore) {
+                                languageMemory: LanguageMemoryStore) {
         let recorder = AudioRecorder(silenceTimeout: settings.silenceTimeout)
         // Feed the HUD's live level meter, same as dictation, so the pill
         // animates while a voice edit is recording.
@@ -285,27 +320,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             recorder: recorder,
             providers: { [settings] in Self.buildProviders(settings: settings) },
             store: store,
-            hint: { [settings, dictionary] in
-                TranscriptionHint(languagePin: settings.languagePin,
-                                  dictionaryWords: dictionary.biasList(budget: 50))
+            hint: { [settings, languageMemory] in
+                let memory = languageMemory.snapshot()
+                return TranscriptionHint(languagePin: settings.languagePin,
+                                  dictionaryWords: MemoryBiasBuilder.biasList(
+                                    terms: memory.terms,
+                                    baseVocabulary: BaseVocabulary.terms,
+                                    budget: 50,
+                                    language: MemoryLanguage(languagePin: settings.languagePin)))
             },
             readSelection: { Self.readSelection() },
-            rewrite: { [settings, dictionary, snippets] selection, instruction in
+            rewrite: { [settings, languageMemory] selection, instruction in
                 guard let formatter = Self.buildFormatter(settings: settings) else {
                     throw ProviderError.notConfigured(
                         "Set a GPT deployment in Settings to use voice edit.")
                 }
+                let memory = languageMemory.snapshot()
                 let context = FormattingContext(
                     appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-                    dictionaryWords: dictionary.biasList(budget: 50),
+                    dictionaryWords: MemoryBiasBuilder.biasList(
+                        terms: memory.terms,
+                        baseVocabulary: BaseVocabulary.terms,
+                        budget: 50,
+                        language: MemoryLanguage(languagePin: settings.languagePin)),
                     speakerContext: settings.speakerContext,
                     language: settings.languagePin,
-                    snippets: snippets.all())
+                    snippets: Self.snippets(from: memory),
+                    replacementRules: memory.replacements)
                 return try await formatter.rewrite(selection: selection,
                                                    instruction: instruction,
                                                    context: context)
             },
             replace: { [weak self] edited in
+                self?.hud.show(.replacing)
                 self?.inserter.deliver(edited) { outcome in
                     if outcome == .clipboardOnly {
                         self?.hud.show(.error("Copied. Press Cmd-V to paste."))
@@ -317,6 +364,170 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.renderVoiceEdit(state)
         }
         self.voiceEditController = controller
+    }
+
+    private func reprocessHistory(_ record: DictationRecord) {
+        guard let audioPath = record.audioPath,
+              FileManager.default.fileExists(atPath: audioPath),
+              let languageMemory
+        else {
+            viewModel?.reprocessHistoryTextOnly(record)
+            return
+        }
+
+        let audioURL = URL(fileURLWithPath: audioPath)
+        let hint = transcriptionHint(languageMemory: languageMemory)
+        let context = formattingContext(languageMemory: languageMemory)
+        Task { [weak self] in
+            await self?.reprocessHistoryAudio(
+                record: record,
+                audioURL: audioURL,
+                hint: hint,
+                context: context,
+                languageMemory: languageMemory
+            )
+        }
+    }
+
+    private func reprocessHistoryAudio(record: DictationRecord,
+                                       audioURL: URL,
+                                       hint: TranscriptionHint,
+                                       context: FormattingContext,
+                                       languageMemory: LanguageMemoryStore) async {
+        let chain = Self.buildProviders(settings: settings)
+        guard !chain.isEmpty else {
+            viewModel?.reprocessHistoryTextOnly(record)
+            hud.show(.error("No provider configured. Reprocessed with local memory only."))
+            hud.hide(after: 4)
+            return
+        }
+
+        var transcript: Transcript?
+        var usedProvider: String?
+        var lastError: Error?
+        for provider in chain {
+            do {
+                transcript = try await provider.transcribe(audio: audioURL, hint: hint)
+                usedProvider = provider.name
+                break
+            } catch {
+                lastError = error
+            }
+        }
+
+        guard let transcript else {
+            let detail = (lastError as? ProviderError).map(Self.describeProviderError)
+                ?? lastError?.localizedDescription ?? "unknown error"
+            hud.show(.error("Reprocess failed: \(detail)"))
+            hud.hide(after: 5)
+            return
+        }
+
+        guard !transcript.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            hud.show(.error("Reprocess returned no speech."))
+            hud.hide(after: 4)
+            return
+        }
+
+        let formatted = await formatForHistoryReprocess(
+            raw: transcript.text,
+            context: context,
+            languageMemory: languageMemory
+        )
+        let reprocessed = DictationRecord(
+            text: formatted.text,
+            createdAt: Date(),
+            language: transcript.detectedLanguage ?? record.language,
+            provider: "\(usedProvider ?? record.provider) reprocess",
+            durationSeconds: transcript.durationSeconds ?? record.durationSeconds,
+            mode: formatted.mode,
+            rawText: transcript.text,
+            intermediateText: record.text,
+            modelDeployment: settings.azureDeployment,
+            memoryHitIDs: formatted.memoryHitIDs.isEmpty ? nil : formatted.memoryHitIDs,
+            replacementRuleIDs: formatted.replacementRuleIDs.isEmpty ? nil : formatted.replacementRuleIDs,
+            snippetIDs: formatted.snippetIDs.isEmpty ? nil : formatted.snippetIDs,
+            audioPath: audioURL.path
+        )
+        let cost = CostEstimator.estimate(
+            durationSeconds: reprocessed.durationSeconds,
+            transcriptionRatePerMinute: settings.transcriptionRatePerMinute,
+            characters: reprocessed.text.count,
+            formatterRatePer1kChars: settings.formatterRatePer1kChars
+        )
+        languageMemory.recordUsage(
+            termIDs: formatted.memoryHitIDs,
+            replacementRuleIDs: formatted.replacementRuleIDs,
+            snippetIDs: formatted.snippetIDs
+        )
+        history?.append(reprocessed.withEstimatedCost(cost))
+        viewModel?.refreshLanguageMemory()
+        viewModel?.refreshRecent()
+        viewModel?.refreshCost()
+        hud.show(.done)
+        hud.hide(after: 1.0)
+    }
+
+    private func formatForHistoryReprocess(raw: String,
+                                           context: FormattingContext,
+                                           languageMemory: LanguageMemoryStore) async -> FormattingResult {
+        let memory = languageMemory.snapshot()
+        let memoryLanguage = MemoryLanguage(languagePin: context.language)
+        let prepared = LanguageMemoryPostProcessor.applyDeterministic(
+            to: raw,
+            snapshot: memory,
+            language: memoryLanguage
+        )
+        guard let formatter = Self.buildFormatter(settings: settings) else {
+            return LanguageMemoryPostProcessor.rawResult(from: prepared)
+        }
+        do {
+            let formatted = try await formatter.format(rawTranscript: prepared.text, context: context)
+            return LanguageMemoryPostProcessor.formattedResult(
+                prepared: prepared,
+                formatted: formatted,
+                snapshot: memory,
+                language: memoryLanguage
+            )
+        } catch {
+            return LanguageMemoryPostProcessor.rawResult(from: prepared)
+        }
+    }
+
+    private func transcriptionHint(languageMemory: LanguageMemoryStore) -> TranscriptionHint {
+        let memory = languageMemory.snapshot()
+        return TranscriptionHint(
+            languagePin: settings.languagePin,
+            dictionaryWords: MemoryBiasBuilder.biasList(
+                terms: memory.terms,
+                baseVocabulary: BaseVocabulary.terms,
+                budget: 50,
+                language: MemoryLanguage(languagePin: settings.languagePin)
+            )
+        )
+    }
+
+    private func formattingContext(languageMemory: LanguageMemoryStore) -> FormattingContext {
+        let memory = languageMemory.snapshot()
+        return FormattingContext(
+            appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
+            dictionaryWords: MemoryBiasBuilder.biasList(
+                terms: memory.terms,
+                baseVocabulary: BaseVocabulary.terms,
+                budget: 50,
+                language: MemoryLanguage(languagePin: settings.languagePin)
+            ),
+            speakerContext: settings.speakerContext,
+            language: settings.languagePin,
+            snippets: Self.snippets(from: memory),
+            replacementRules: memory.replacements
+        )
+    }
+
+    private static func snippets(from memory: LanguageMemorySnapshot) -> [Snippet] {
+        memory.snippets
+            .filter(\.isEnabled)
+            .map { Snippet(id: $0.id, trigger: $0.trigger, expansion: $0.expansion) }
     }
 
     /// Reads the current selection: Accessibility first, then a Cmd-C fallback
@@ -450,6 +661,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             deployment: settings.gptDeployment,
             apiVersion: settings.azureAPIVersion)
         return AzureChatFormatter(config: config)
+    }
+
+    private static func describeProviderError(_ error: ProviderError) -> String {
+        switch error {
+        case .http(let status, let body):
+            let detail = body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)
+            return detail.isEmpty ? "HTTP \(status) from provider"
+                                  : "HTTP \(status): \(detail)"
+        case .badResponse:
+            return "unreadable provider response"
+        case .notConfigured(let what):
+            return what
+        case .timedOut:
+            return "timed out"
+        case .transport(let urlError):
+            return urlError.localizedDescription
+        }
     }
 
     private func startHotkeys() {
@@ -586,12 +814,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             setIcon("pencil", tint: .systemRed)
             // Same ticking timer as dictation: the pill shows the running
             // seconds and the live audio level so you can see it is recording.
-            startRecordingTimer()
+            startVoiceEditRecordingTimer()
         case .rewriting:
             chimes.playStop()
             stopRecordingTimer()
             setIcon("waveform", tint: .systemOrange)
-            hud.show(.transcribing)
+            hud.show(.voiceEditRewriting)
         case .error(let message):
             stopRecordingTimer()
             setIcon("waveform", tint: nil)
@@ -613,6 +841,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self else { return }
                 let elapsed = Int(Date().timeIntervalSince(self.recordingStartedAt ?? Date()))
                 self.hud.show(.recording(seconds: elapsed, level: self.currentLevel))
+            }
+        }
+    }
+
+    private func startVoiceEditRecordingTimer() {
+        recordingStartedAt = Date()
+        hud.show(.voiceEditRecording(seconds: 0, level: 0))
+        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
+                                              repeats: true) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                let elapsed = Int(Date().timeIntervalSince(self.recordingStartedAt ?? Date()))
+                self.hud.show(.voiceEditRecording(seconds: elapsed, level: self.currentLevel))
             }
         }
     }

@@ -83,6 +83,7 @@ struct FakeProvider: TranscriptionProvider {
 
     private func makeFormattingController(
         providers: [TranscriptionProvider],
+        rawTransform: ((String, FormattingContext) async -> FormattingResult)? = nil,
         format: @escaping (String, FormattingContext) async throws -> FormattingResult)
         -> DictationController {
         let controller = DictationController(
@@ -94,6 +95,7 @@ struct FakeProvider: TranscriptionProvider {
             deliver: { [weak self] text, done in self?.delivered.append(text); done() },
             record: { [weak self] record in self?.records.append(record) },
             format: format,
+            rawTransform: rawTransform,
             context: { FormattingContext(appBundleID: nil, dictionaryWords: [],
                                          speakerContext: "", language: .auto) },
             suggestTerms: { [weak self] terms in self?.suggested.append(contentsOf: terms) },
@@ -103,17 +105,23 @@ struct FakeProvider: TranscriptionProvider {
     }
 
     @Test func testFormatterAppliedAndTermsSuggested() async throws {
+        let memoryID = UUID()
+        let snippetID = UUID()
         let provider = FakeProvider(name: "fake",
             result: .success(Transcript(text: "hello world",
                                         detectedLanguage: "english", durationSeconds: 1)))
         let controller = makeFormattingController(providers: [provider]) { raw, _ in
             #expect(raw == "hello world")
-            return FormattingResult(text: "Hello, world.", newTerms: ["Karko"])
+            return FormattingResult(text: "Hello, world.", newTerms: ["Karko"],
+                                    memoryHitIDs: [memoryID],
+                                    snippetIDs: [snippetID])
         }
         controller.toggle()
         await controller.toggleAndWait()
         #expect(delivered == ["Hello, world."])
         #expect(records.first?.text == "Hello, world.")
+        #expect(records.first?.memoryHitIDs == [memoryID])
+        #expect(records.first?.snippetIDs == [snippetID])
         #expect(suggested == ["Karko"])
         let sidecar = recorder.startedURL!.deletingPathExtension()
             .appendingPathExtension("txt")
@@ -134,6 +142,35 @@ struct FakeProvider: TranscriptionProvider {
         #expect(delivered == ["hello world"])
     }
 
+    @Test func testRawModeCanApplyLocalTransformWithoutFormatter() async throws {
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "cloud code",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let ruleID = UUID()
+        let controller = makeFormattingController(
+            providers: [provider],
+            rawTransform: { raw, _ in
+                #expect(raw == "cloud code")
+                return FormattingResult(
+                    text: "Claude Code",
+                    newTerms: [],
+                    mode: .raw,
+                    replacementRuleIDs: [ruleID]
+                )
+            },
+            format: { _, _ in
+                Issue.record("formatter must not run in raw mode")
+                return FormattingResult(text: "WRONG", newTerms: [])
+            }
+        )
+        controller.toggle()
+        controller.toggle(rawMode: true)
+        await controller.toggleAndWait()
+        #expect(delivered == ["Claude Code"])
+        #expect(records.first?.mode == .raw)
+        #expect(records.first?.replacementRuleIDs == [ruleID])
+    }
+
     @Test func testFormatterFailureFallsBackToRaw() async throws {
         struct Boom: Error {}
         let provider = FakeProvider(name: "fake",
@@ -145,6 +182,32 @@ struct FakeProvider: TranscriptionProvider {
         controller.toggle()
         await controller.toggleAndWait()
         #expect(delivered == ["hello world"])
+        #expect(fellBack)
+    }
+
+    @Test func testFormatterFailureUsesLocalRawTransformWhenAvailable() async throws {
+        struct Boom: Error {}
+        let provider = FakeProvider(name: "fake",
+            result: .success(Transcript(text: "cloud code",
+                                        detectedLanguage: nil, durationSeconds: nil)))
+        let ruleID = UUID()
+        let controller = makeFormattingController(
+            providers: [provider],
+            rawTransform: { _, _ in
+                FormattingResult(
+                    text: "Claude Code",
+                    newTerms: [],
+                    mode: .raw,
+                    replacementRuleIDs: [ruleID]
+                )
+            },
+            format: { _, _ in throw Boom() }
+        )
+        controller.toggle()
+        await controller.toggleAndWait()
+        #expect(delivered == ["Claude Code"])
+        #expect(records.first?.mode == .raw)
+        #expect(records.first?.replacementRuleIDs == [ruleID])
         #expect(fellBack)
     }
 
@@ -170,6 +233,7 @@ struct FakeProvider: TranscriptionProvider {
         #expect(records.count == 1)
         #expect(records.first?.text == "hello world")
         #expect(records.first?.provider == "fake")
+        #expect(records.first?.audioPath == recorder.startedURL!.path)
     }
 
     @Test func testDurationFallsBackToMeasuredWhenProviderOmitsIt() async throws {

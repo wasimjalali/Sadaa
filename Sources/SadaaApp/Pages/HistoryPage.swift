@@ -8,6 +8,9 @@ struct HistoryPage: View {
     @ObservedObject var viewModel: SadaaViewModel
     @State private var query = ""
     @State private var showClearConfirm = false
+    @State private var correctionRecord: DictationRecord?
+    @State private var correctionObserved = ""
+    @State private var correctionCorrected = ""
     @FocusState private var searchFocused: Bool
 
     /// Reading `viewModel.recent.count` ties this view's identity to the
@@ -50,6 +53,9 @@ struct HistoryPage: View {
             }
             Button("Cancel", role: .cancel) {}
         }
+        .sheet(item: $correctionRecord) { record in
+            correctionSheet(record)
+        }
     }
 
     // MARK: - Header
@@ -64,14 +70,8 @@ struct HistoryPage: View {
                 Image(systemName: "chart.bar.fill")
                     .font(.system(size: 11))
                     .foregroundStyle(Theme.gold)
-                Text("This month: ")
-                    .foregroundStyle(Theme.charcoal.opacity(0.55))
-                + Text(PageFormat.minutes(viewModel.monthlyCost.minutes))
-                    .foregroundStyle(Theme.charcoal.opacity(0.8))
-                Text(", about ")
-                    .foregroundStyle(Theme.charcoal.opacity(0.55))
-                + Text(PageFormat.dollars(viewModel.monthlyCost.cost))
-                    .foregroundStyle(Theme.charcoal.opacity(0.8))
+                Text("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost))")
+                    .foregroundStyle(Theme.charcoal.opacity(0.72))
             }
             .font(.system(size: 12, weight: .medium))
             .contentTransition(.numericText())
@@ -210,6 +210,19 @@ struct HistoryPage: View {
         HistoryRow(
             record: record,
             onCopy: { copy(record.text) },
+            onSendToScratchpad: {
+                viewModel.sendToScratchpad(record)
+            },
+            onReprocess: {
+                withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
+                    viewModel.reprocessHistoryWithLanguageMemory(record)
+                }
+            },
+            onLearn: {
+                correctionObserved = record.rawText ?? record.text
+                correctionCorrected = record.text
+                correctionRecord = record
+            },
             onDelete: {
                 withAnimation(.spring(response: 0.3, dampingFraction: 0.8)) {
                     viewModel.historyStore.delete(id: record.id)
@@ -223,6 +236,37 @@ struct HistoryPage: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    private func correctionSheet(_ record: DictationRecord) -> some View {
+        VStack(alignment: .leading, spacing: 14) {
+            Text("Learn correction")
+                .font(.system(size: 18, weight: .bold))
+                .foregroundStyle(Theme.charcoal)
+            TextField("Heard", text: $correctionObserved)
+                .textFieldStyle(.roundedBorder)
+            TextField("Write", text: $correctionCorrected)
+                .textFieldStyle(.roundedBorder)
+            HStack {
+                Spacer()
+                Button("Cancel") {
+                    correctionRecord = nil
+                }
+                Button("Save") {
+                    viewModel.languageMemory.learnCorrection(
+                        observed: correctionObserved,
+                        corrected: correctionCorrected
+                    )
+                    correctionRecord = nil
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.navy)
+                .disabled(correctionObserved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                          correctionCorrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(22)
+        .frame(width: 420)
     }
 
     // MARK: - Grouping
@@ -278,6 +322,9 @@ struct HistoryPage: View {
 private struct HistoryRow: View {
     let record: DictationRecord
     let onCopy: () -> Void
+    let onSendToScratchpad: () -> Void
+    let onReprocess: () -> Void
+    let onLearn: () -> Void
     let onDelete: () -> Void
 
     @State private var hovering = false
@@ -295,6 +342,9 @@ private struct HistoryRow: View {
                 if hovering || copied {
                     HStack(spacing: 6) {
                         copyButton
+                        actionButton("note.text", "Send to Scratchpad", onSendToScratchpad)
+                        actionButton("arrow.clockwise", "Reprocess with Language Memory", onReprocess)
+                        actionButton("graduationcap", "Learn correction", onLearn)
                         deleteButton
                     }
                     .transition(.opacity.combined(with: .move(edge: .trailing)))
@@ -309,6 +359,12 @@ private struct HistoryRow: View {
                 capsule(record.provider, icon: "waveform")
                 if let cost = record.estimatedCost {
                     capsule(PageFormat.dollars(cost), icon: "creditcard")
+                }
+                if let hits = record.memoryHitIDs, !hits.isEmpty {
+                    capsule("\(hits.count) memory \(hits.count == 1 ? "hit" : "hits")", icon: "text.book.closed")
+                }
+                if let snippets = record.snippetIDs, !snippets.isEmpty {
+                    capsule("\(snippets.count) snippet \(snippets.count == 1 ? "hit" : "hits")", icon: "text.badge.plus")
                 }
                 // Diagnosability: which pipeline produced this text. Raw flags
                 // pure transcription (deliberate or a formatter fallback). Plain
@@ -368,6 +424,16 @@ private struct HistoryRow: View {
         .help("Delete this dictation")
     }
 
+    private func actionButton(_ icon: String, _ help: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.navy)
+        }
+        .buttonStyle(PressableButtonStyle())
+        .help(help)
+    }
+
     private func capsule(_ text: String, icon: String) -> some View {
         HStack(spacing: 3) {
             Image(systemName: icon)
@@ -397,9 +463,16 @@ private struct PressableButtonStyle: ButtonStyle {
 
 /// Quiet bordered button for the Clear all control, with hover and press feedback.
 private struct ClearAllButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        ClearAllButtonBody(configuration: configuration)
+    }
+}
+
+private struct ClearAllButtonBody: View {
+    let configuration: ButtonStyle.Configuration
     @State private var hovering = false
 
-    func makeBody(configuration: Configuration) -> some View {
+    var body: some View {
         configuration.label
             .foregroundStyle(Theme.charcoal.opacity(0.7))
             .padding(.horizontal, 11)

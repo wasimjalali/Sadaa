@@ -35,7 +35,8 @@ public final class AzureChatFormatter: @unchecked Sendable {
             dictionaryWords: context.dictionaryWords,
             speakerContext: context.speakerContext,
             snippets: context.snippets,
-            language: context.language)
+            language: context.language,
+            replacementRules: context.replacementRules)
 
         var components = URLComponents(
             url: AzureOpenAIProvider.baseURL(from: config.endpoint).appendingPathComponent(

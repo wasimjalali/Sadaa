@@ -29,6 +29,7 @@ public final class DictationController {
     private let deliver: (String, @escaping () -> Void) -> Void
     private let record: (DictationRecord) -> Void
     private let format: ((String, FormattingContext) async throws -> FormattingResult)?
+    private let rawTransform: ((String, FormattingContext) async -> FormattingResult)?
     private let context: () -> FormattingContext
     private let suggestTerms: ([String]) -> Void
     private let formatterFellBack: () -> Void
@@ -57,6 +58,7 @@ public final class DictationController {
                 deliver: @escaping (String, @escaping () -> Void) -> Void,
                 record: @escaping (DictationRecord) -> Void = { _ in },
                 format: ((String, FormattingContext) async throws -> FormattingResult)? = nil,
+                rawTransform: ((String, FormattingContext) async -> FormattingResult)? = nil,
                 context: @escaping () -> FormattingContext = {
                     FormattingContext(appBundleID: nil, dictionaryWords: [],
                                       speakerContext: "", language: .auto)
@@ -74,6 +76,7 @@ public final class DictationController {
         self.deliver = deliver
         self.record = record
         self.format = format
+        self.rawTransform = rawTransform
         self.context = context
         self.suggestTerms = suggestTerms
         self.formatterFellBack = formatterFellBack
@@ -252,25 +255,52 @@ public final class DictationController {
 
         var finalText = transcript.text
         var mode: FormattingMode = .raw
-        if !pendingRawMode, let format {
+        var replacementRuleIDs: [UUID] = []
+        var memoryHitIDs: [UUID] = []
+        var snippetIDs: [UUID] = []
+        if pendingRawMode {
+            if let rawTransform {
+                let result = await rawTransform(transcript.text, formattingContext)
+                finalText = result.text
+                mode = .raw
+                replacementRuleIDs = result.replacementRuleIDs
+                memoryHitIDs = result.memoryHitIDs
+                snippetIDs = result.snippetIDs
+            }
+        } else if let format {
             do {
                 let result = try await format(transcript.text, formattingContext)
                 finalText = result.text
                 mode = result.mode
+                replacementRuleIDs = result.replacementRuleIDs
+                memoryHitIDs = result.memoryHitIDs
+                snippetIDs = result.snippetIDs
                 if !result.newTerms.isEmpty { suggestTerms(result.newTerms) }
             } catch {
                 formatterFellBack()   // keep raw finalText; mode stays .raw
+                if let rawTransform {
+                    let result = await rawTransform(transcript.text, formattingContext)
+                    finalText = result.text
+                    replacementRuleIDs = result.replacementRuleIDs
+                    memoryHitIDs = result.memoryHitIDs
+                    snippetIDs = result.snippetIDs
+                }
             }
         }
         pendingRawMode = false
 
         record(DictationRecord(
             text: finalText,
-            createdAt: Date(),
+            createdAt: now(),
             language: transcript.detectedLanguage,
             provider: usedProvider ?? "unknown",
             durationSeconds: transcript.durationSeconds ?? measuredDuration,
-            mode: mode))
+            mode: mode,
+            rawText: transcript.text,
+            memoryHitIDs: memoryHitIDs.isEmpty ? nil : memoryHitIDs,
+            replacementRuleIDs: replacementRuleIDs.isEmpty ? nil : replacementRuleIDs,
+            snippetIDs: snippetIDs.isEmpty ? nil : snippetIDs,
+            audioPath: audioURL.path))
 
         state = .delivering
         try? store.prune(keep: recordingsToKeep)

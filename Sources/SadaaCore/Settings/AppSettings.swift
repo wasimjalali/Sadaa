@@ -14,11 +14,18 @@ public enum LanguagePin: String, CaseIterable, Sendable {
     }
 }
 
+public enum TranscriptionPreset: String, CaseIterable, Sendable {
+    case fast, accurate, speechMAI, legacy
+}
+
 /// Non-secret app configuration. API keys live in Keychain, never here.
 public final class AppSettings {
     private enum Keys {
         static let azureEndpoint = "azureEndpoint"
         static let azureDeployment = "azureDeployment"
+        static let transcriptionPreset = "transcriptionPreset"
+        static let fastTranscriptionDeployment = "fastTranscriptionDeployment"
+        static let accurateTranscriptionDeployment = "accurateTranscriptionDeployment"
         static let azureAPIVersion = "azureAPIVersion"
         static let languagePin = "languagePin"
         static let silenceTimeout = "silenceTimeout"
@@ -38,6 +45,7 @@ public final class AppSettings {
         static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
         static let formatterRatePer1kChars = "formatterRatePer1kChars"
         static let soundEffectsEnabled = "soundEffectsEnabled"
+        static let lastExportFolder = "lastExportFolder"
     }
 
     private let defaults: UserDefaults
@@ -54,6 +62,24 @@ public final class AppSettings {
     public var azureDeployment: String {
         get { defaults.string(forKey: Keys.azureDeployment) ?? "" }
         set { defaults.set(newValue, forKey: Keys.azureDeployment) }
+    }
+
+    public var transcriptionPreset: TranscriptionPreset {
+        get {
+            TranscriptionPreset(rawValue: defaults.string(forKey: Keys.transcriptionPreset) ?? "")
+                ?? .fast
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.transcriptionPreset) }
+    }
+
+    public var fastTranscriptionDeployment: String {
+        get { defaults.string(forKey: Keys.fastTranscriptionDeployment) ?? "gpt-4o-mini-transcribe" }
+        set { defaults.set(newValue, forKey: Keys.fastTranscriptionDeployment) }
+    }
+
+    public var accurateTranscriptionDeployment: String {
+        get { defaults.string(forKey: Keys.accurateTranscriptionDeployment) ?? "gpt-4o-transcribe" }
+        set { defaults.set(newValue, forKey: Keys.accurateTranscriptionDeployment) }
     }
 
     /// Default supports the gpt-4o-transcribe family (whisper-1 too). The older
@@ -176,5 +202,10 @@ public final class AppSettings {
     public var formatterRatePer1kChars: Double {
         get { defaults.object(forKey: Keys.formatterRatePer1kChars) as? Double ?? 0.002 }
         set { defaults.set(newValue, forKey: Keys.formatterRatePer1kChars) }
+    }
+
+    public var lastExportFolder: String {
+        get { defaults.string(forKey: Keys.lastExportFolder) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.lastExportFolder) }
     }
 }

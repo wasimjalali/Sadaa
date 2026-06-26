@@ -21,6 +21,23 @@ import Testing
         #expect(prompt.contains("Karko AI, Supabase"))
     }
 
+    @Test func testIncludesReplacementRulesWhenPresent() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default,
+            dictionaryWords: ["Karko AI"],
+            speakerContext: "ctx",
+            snippets: [Snippet(trigger: "my sig", expansion: "Wasim")],
+            language: .auto,
+            replacementRules: [
+                ReplacementRule(match: "cloud code", replacement: "Claude Code",
+                                matchMode: .caseInsensitivePhrase)
+            ]
+        )
+        #expect(prompt.contains("Karko AI"))
+        #expect(prompt.contains("cloud code -> Claude Code"))
+        #expect(prompt.contains("\"my sig\" -> Wasim"))
+    }
+
     @Test func testOmitsDictionaryLineWhenEmpty() {
         let prompt = FormattingPromptBuilder.systemPrompt(
             profile: FormattingProfiles.default,

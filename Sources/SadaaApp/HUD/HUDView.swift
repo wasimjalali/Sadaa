@@ -7,8 +7,11 @@ import SadaaCore
 /// not in the controller state machines.
 enum HUDDisplay: Equatable {
     case recording(seconds: Int, level: Float)
+    case voiceEditRecording(seconds: Int, level: Float)
     case transcribing
+    case voiceEditRewriting
     case delivering
+    case replacing
     /// A brief success confirmation shown after a dictation lands.
     case done
     case error(String)
@@ -58,8 +61,10 @@ struct HUDView: View {
     private var phase: Int {
         switch display {
         case .recording: return 0
+        case .voiceEditRecording: return 6
         case .transcribing: return 1
-        case .delivering: return 2
+        case .voiceEditRewriting: return 7
+        case .delivering, .replacing: return 2
         case .done: return 3
         case .error: return 4
         case .language: return 5
@@ -78,10 +83,26 @@ struct HUDView: View {
                 .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
                 .foregroundStyle(Theme.cream)
             KeyHint(label: "esc")
+        case .voiceEditRecording(let seconds, let level):
+            Image(systemName: "pencil")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.gold)
+            SadaaWaveBars(style: .live(level: level))
+            Text(Self.timecode(seconds))
+                .font(.system(size: 13, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(Theme.cream)
+            Text("Editing selection")
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.cream.opacity(0.82))
+            KeyHint(label: "esc")
         case .transcribing:
             status("Transcribing")
+        case .voiceEditRewriting:
+            status("Rewriting")
         case .delivering:
             status("Inserting")
+        case .replacing:
+            status("Replacing")
         case .done:
             HStack(spacing: 8) {
                 Image(systemName: "checkmark.circle.fill")

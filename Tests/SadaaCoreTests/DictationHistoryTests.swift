@@ -35,6 +35,7 @@ import Foundation
         #expect(all.count == 1)
         #expect(all.first?.text == "old one")
         #expect(all.first?.mode == nil)
+        #expect(all.first?.snippetIDs == nil)
     }
 
     @Test func testLegacyPromptModeDecodesAsRaw() throws {
@@ -65,11 +66,19 @@ import Foundation
     }
 
     @Test func testWithEstimatedCostPreservesMode() {
+        let ruleID = UUID()
+        let snippetID = UUID()
         let record = DictationRecord(
             text: "x", createdAt: Date(), language: nil, provider: "azure",
-            durationSeconds: 1, mode: .formatted)
+            durationSeconds: 1, mode: .formatted, rawText: "raw",
+            replacementRuleIDs: [ruleID], snippetIDs: [snippetID],
+            audioPath: "/tmp/audio.wav")
         let updated = record.withEstimatedCost(0.01)
         #expect(updated.mode == .formatted)
+        #expect(updated.rawText == "raw")
+        #expect(updated.replacementRuleIDs == [ruleID])
+        #expect(updated.snippetIDs == [snippetID])
+        #expect(updated.audioPath == "/tmp/audio.wav")
     }
 
     @Test func testRoundTripPersists() throws {

@@ -12,6 +12,9 @@ struct SettingsPage: View {
 
     @State private var endpoint = ""
     @State private var deployment = ""
+    @State private var preset: TranscriptionPreset = .fast
+    @State private var fastDeployment = ""
+    @State private var accurateDeployment = ""
     @State private var apiVersion = ""
     @State private var apiKey = ""
     @State private var formattingEnabled = true
@@ -32,6 +35,7 @@ struct SettingsPage: View {
     @State private var soundEffects = true
     @State private var micGranted = false
     @State private var axTrusted = false
+    @State private var providerHealth: ProviderHealthResult?
     @State private var saved = false
     @State private var rateError = ""
 
@@ -50,6 +54,7 @@ struct SettingsPage: View {
                 hotkeyCard
                 languageCard
                 formattingCard
+                providerPresetCard
                 azureCard
                 fallbackCard
                 costCard
@@ -184,8 +189,47 @@ struct SettingsPage: View {
                     .buttonStyle(.borderedProminent)
                     .tint(Theme.navy)
                     .keyboardShortcut(.defaultAction)
+                Button("Test Azure") { checkProviderConfiguration() }
+                    .buttonStyle(SettingsBorderedButtonStyle())
                 savedBadge(saved && rateError.isEmpty)
             }
+            if let providerHealth {
+                statusCapsule(
+                    "\(providerHealth.providerName): \(providerHealth.message) \(providerHealth.redactedEndpoint)",
+                    good: providerHealth.ok
+                )
+            }
+        }
+    }
+
+    private var providerPresetCard: some View {
+        card("Transcription model", icon: "speedometer") {
+            Picker("Preset", selection: $preset) {
+                ForEach(TranscriptionPreset.allCases, id: \.self) { option in
+                    Text(presetLabel(option)).tag(option)
+                }
+            }
+            .pickerStyle(.segmented)
+            .onChange(of: preset) { _, newValue in
+                switch newValue {
+                case .fast:
+                    deployment = fastDeployment
+                    maiEnabled = false
+                case .accurate:
+                    deployment = accurateDeployment
+                    maiEnabled = false
+                case .speechMAI:
+                    maiEnabled = true
+                case .legacy:
+                    deployment = "whisper"
+                    maiEnabled = false
+                }
+            }
+            HStack(spacing: 8) {
+                field("Fast deployment", "gpt-4o-mini-transcribe", $fastDeployment)
+                field("Accurate deployment", "gpt-4o-transcribe", $accurateDeployment)
+            }
+            hint("Recommended: Fast uses your Azure deployment of gpt-4o-mini-transcribe or the newest mini transcribe variant available in your region; Accurate uses gpt-4o-transcribe when quality matters most. Realtime models are for streaming/live transcription, not this file-based hotkey flow. Use Azure Speech/MAI only where that resource is enabled.")
         }
     }
 
@@ -393,6 +437,9 @@ struct SettingsPage: View {
     private func load() {
         endpoint = settings.azureEndpoint
         deployment = settings.azureDeployment
+        preset = settings.transcriptionPreset
+        fastDeployment = settings.fastTranscriptionDeployment
+        accurateDeployment = settings.accurateTranscriptionDeployment
         apiVersion = settings.azureAPIVersion
         apiKey = Keychain.get(account: "azure-openai-key") ?? ""
         formattingEnabled = settings.formattingEnabled
@@ -416,6 +463,11 @@ struct SettingsPage: View {
     private func save() {
         settings.azureEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.azureDeployment = deployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        settings.transcriptionPreset = preset
+        let trimmedFastDeployment = fastDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedFastDeployment.isEmpty { settings.fastTranscriptionDeployment = trimmedFastDeployment }
+        let trimmedAccurateDeployment = accurateDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmedAccurateDeployment.isEmpty { settings.accurateTranscriptionDeployment = trimmedAccurateDeployment }
         // A blank API version would persist an empty string and break every
         // request; keep the stored value instead (the field re-syncs below).
         let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -493,6 +545,79 @@ struct SettingsPage: View {
             .replacingOccurrences(of: ",", with: ".")
         return normalized.isEmpty ? nil : Double(normalized)
     }
+
+    private func checkProviderConfiguration() {
+        let trimmedEndpoint = endpoint.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedDeployment = deployment.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
+        let trimmedKey = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        guard !trimmedEndpoint.isEmpty, !trimmedDeployment.isEmpty, !trimmedKey.isEmpty else {
+            providerHealth = ProviderHealthCheck.result(
+                providerName: "Azure OpenAI",
+                endpoint: trimmedEndpoint,
+                ok: false,
+                startedAt: Date(),
+                finishedAt: Date(),
+                message: "missing endpoint, deployment, or key"
+            )
+            return
+        }
+
+        guard let endpointURL = URL(string: trimmedEndpoint), endpointURL.host != nil else {
+            providerHealth = ProviderHealthCheck.result(
+                providerName: "Azure OpenAI",
+                endpoint: trimmedEndpoint,
+                ok: false,
+                startedAt: Date(),
+                finishedAt: Date(),
+                message: "invalid endpoint URL"
+            )
+            return
+        }
+
+        let provider = AzureOpenAIProvider(config: .init(
+            endpoint: endpointURL,
+            apiKey: trimmedKey,
+            deployment: trimmedDeployment,
+            apiVersion: trimmedAPIVersion.isEmpty ? settings.azureAPIVersion : trimmedAPIVersion
+        ))
+        let biasWords = MemoryBiasBuilder.biasList(
+            terms: viewModel.languageMemory.terms,
+            baseVocabulary: BaseVocabulary.terms,
+            budget: 50,
+            language: MemoryLanguage(languagePin: viewModel.languagePin)
+        )
+        let hint = TranscriptionHint(languagePin: viewModel.languagePin,
+                                     dictionaryWords: biasWords)
+        providerHealth = ProviderHealthResult(
+            providerName: "Azure OpenAI",
+            ok: false,
+            latencyMilliseconds: nil,
+            message: "testing provider...",
+            redactedEndpoint: ProviderHealthCheck.redactedEndpoint(trimmedEndpoint)
+        )
+
+        Task {
+            let result = await ProviderHealthCheck.check(
+                provider: provider,
+                endpoint: trimmedEndpoint,
+                hint: hint
+            )
+            await MainActor.run {
+                providerHealth = result
+            }
+        }
+    }
+
+    private func presetLabel(_ preset: TranscriptionPreset) -> String {
+        switch preset {
+        case .fast: return "Fast"
+        case .accurate: return "Accurate"
+        case .speechMAI: return "Speech/MAI"
+        case .legacy: return "Legacy"
+        }
+    }
 }
 
 /// Wraps a control row in a soft cream highlight that fades in on hover.
@@ -522,9 +647,16 @@ private struct HoverHighlightRow<Content: View>: View {
 /// Bordered, navy-tinted secondary button with hover and pressed feedback.
 /// Used for the non-primary actions on the page so they feel consistent.
 private struct SettingsBorderedButtonStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        SettingsBorderedButtonBody(configuration: configuration)
+    }
+}
+
+private struct SettingsBorderedButtonBody: View {
+    let configuration: ButtonStyle.Configuration
     @State private var hovering = false
 
-    func makeBody(configuration: Configuration) -> some View {
+    var body: some View {
         configuration.label
             .font(.system(size: 13, weight: .medium))
             .foregroundStyle(Theme.navy)

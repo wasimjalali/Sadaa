@@ -4,15 +4,15 @@ import SadaaCore
 /// Sections in the main window sidebar. String-raw + Identifiable makes it
 /// usable directly as the selection value for `List(selection:)`.
 enum SidebarSection: String, CaseIterable, Identifiable {
-    case home, dictionary, notes, history, settings
+    case home, languageMemory, scratchpad, history, settings
 
     var id: String { rawValue }
 
     var title: String {
         switch self {
         case .home: return "Home"
-        case .dictionary: return "Dictionary"
-        case .notes: return "Notes"
+        case .languageMemory: return "Language Memory"
+        case .scratchpad: return "Scratchpad"
         case .history: return "History"
         case .settings: return "Settings"
         }
@@ -21,8 +21,8 @@ enum SidebarSection: String, CaseIterable, Identifiable {
     var systemImage: String {
         switch self {
         case .home: return "house"
-        case .dictionary: return "character.book.closed"
-        case .notes: return "note.text"
+        case .languageMemory: return "text.book.closed"
+        case .scratchpad: return "note.text"
         case .history: return "clock.arrow.circlepath"
         case .settings: return "gearshape"
         }
@@ -98,10 +98,10 @@ struct RootView: View {
         switch selection {
         case .home:
             HomePage(viewModel: viewModel)
-        case .dictionary:
-            DictionaryPage(viewModel: viewModel)
-        case .notes:
-            NotesPage(viewModel: viewModel)
+        case .languageMemory:
+            LanguageMemoryPage(viewModel: viewModel.languageMemory)
+        case .scratchpad:
+            ScratchpadPage(viewModel: viewModel)
         case .history:
             HistoryPage(viewModel: viewModel)
         case .settings:

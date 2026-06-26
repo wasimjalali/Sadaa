@@ -191,6 +191,19 @@ import Foundation
         #expect(suggestions.first == "TermX")
     }
 
+    @Test func testPendingSuggestionEvidenceExposesCountsForMigration() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = DictionaryStore(fileURL: url)
+        store.suggest(["TermX"])
+        store.suggest(["TermY"])
+        store.suggest(["TermX"])
+
+        #expect(store.pendingSuggestionEvidence().first?.term == "TermX")
+        #expect(store.pendingSuggestionEvidence().first?.evidenceCount == 2)
+        #expect(store.pendingSuggestionEvidence().last?.evidenceCount == 1)
+    }
+
     /// Quality filter: 2-char term rejected.
     @Test func testSuggestRejectsTwoCharTerm() {
         let url = tempFile()

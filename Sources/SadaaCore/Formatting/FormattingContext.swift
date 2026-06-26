@@ -7,17 +7,20 @@ public struct FormattingContext: Sendable {
     public let speakerContext: String
     public let language: LanguagePin
     public let snippets: [Snippet]
+    public let replacementRules: [ReplacementRule]
 
     public init(appBundleID: String?,
                 dictionaryWords: [String],
                 speakerContext: String,
                 language: LanguagePin,
-                snippets: [Snippet] = []) {
+                snippets: [Snippet] = [],
+                replacementRules: [ReplacementRule] = []) {
         self.appBundleID = appBundleID
         self.dictionaryWords = dictionaryWords
         self.speakerContext = speakerContext
         self.language = language
         self.snippets = snippets
+        self.replacementRules = replacementRules
     }
 }
 
@@ -49,11 +52,23 @@ public struct FormattingResult: Equatable, Sendable {
     public let newTerms: [String]
     /// How this text was produced; the pipeline copies it onto the record.
     public let mode: FormattingMode
+    /// Deterministic Language Memory replacements applied around formatting.
+    public let replacementRuleIDs: [UUID]
+    /// Language Memory terms found in the raw/intermediate/final text.
+    public let memoryHitIDs: [UUID]
+    /// Spoken snippets deterministically expanded around formatting.
+    public let snippetIDs: [UUID]
 
     public init(text: String, newTerms: [String],
-                mode: FormattingMode = .formatted) {
+                mode: FormattingMode = .formatted,
+                replacementRuleIDs: [UUID] = [],
+                memoryHitIDs: [UUID] = [],
+                snippetIDs: [UUID] = []) {
         self.text = text
         self.newTerms = newTerms
         self.mode = mode
+        self.replacementRuleIDs = replacementRuleIDs
+        self.memoryHitIDs = memoryHitIDs
+        self.snippetIDs = snippetIDs
     }
 }

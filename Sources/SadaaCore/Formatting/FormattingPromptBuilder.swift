@@ -11,7 +11,8 @@ public enum FormattingPromptBuilder {
                                     dictionaryWords: [String],
                                     speakerContext: String,
                                     snippets: [Snippet] = [],
-                                    language: LanguagePin = .auto) -> String {
+                                    language: LanguagePin = .auto,
+                                    replacementRules: [ReplacementRule] = []) -> String {
         var lines: [String] = []
 
         lines.append("# Identity")
@@ -41,6 +42,12 @@ public enum FormattingPromptBuilder {
             let pairs = snippets.map { "\"\($0.trigger)\" -> \($0.expansion)" }
                 .joined(separator: "; ")
             lines.append("- Expand these spoken shortcuts when you hear the trigger phrase: \(pairs).")
+        }
+        let activeReplacements = replacementRules.filter(\.isEnabled)
+        if !activeReplacements.isEmpty {
+            let pairs = activeReplacements.map { "\($0.match) -> \($0.replacement)" }
+                .joined(separator: "; ")
+            lines.append("- Apply these personal replacement rules when the phrase appears: \(pairs).")
         }
 
         lines.append("")

@@ -9,10 +9,6 @@ final class SadaaViewModel: ObservableObject {
     @Published var recent: [DictationRecord] = []
     @Published var azureConfigured: Bool = false
     @Published var languagePin: LanguagePin = .auto
-    @Published var dictionaryEntries: [DictionaryEntry] = []
-    @Published var dictionarySuggestions: [String] = []
-    @Published var snippets: [Snippet] = []
-    @Published var notes: [Note] = []
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
@@ -30,31 +26,28 @@ final class SadaaViewModel: ObservableObject {
     var onLanguageSwitchKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to retry the last failed dictation on its audio.
     var onRetry: (() -> Void)?
+    /// Set by the app layer to re-run a history item from retained audio when possible.
+    var onReprocessHistory: ((DictationRecord) -> Void)?
 
     private let settings: AppSettings
     private let history: DictationHistory
-    private let dictionary: DictionaryStore
-    private let snippetStore: SnippetStore
-    private let notesStore: NotesStore
+    let languageMemory: LanguageMemoryViewModel
+    let scratchpad: ScratchpadViewModel
     private let onToggle: () -> Void
 
     /// History pages read search/all directly off the store.
     var historyStore: DictationHistory { history }
 
     init(settings: AppSettings, history: DictationHistory,
-         dictionary: DictionaryStore, snippets: SnippetStore,
-         notes: NotesStore, onToggle: @escaping () -> Void) {
+         languageMemory: LanguageMemoryStore,
+         scratchpad: ScratchpadStore, onToggle: @escaping () -> Void) {
         self.settings = settings
         self.history = history
-        self.dictionary = dictionary
-        self.snippetStore = snippets
-        self.notesStore = notes
+        self.languageMemory = LanguageMemoryViewModel(store: languageMemory)
+        self.scratchpad = ScratchpadViewModel(store: scratchpad)
         self.onToggle = onToggle
         refreshConfig()
         refreshRecent()
-        refreshDictionary()
-        refreshSnippets()
-        refreshNotes()
         refreshCost()
     }
 
@@ -135,64 +128,59 @@ final class SadaaViewModel: ObservableObject {
         applyLanguageSwitch(code)
     }
 
-    // MARK: - Dictionary
-
-    func refreshDictionary() {
-        dictionaryEntries = dictionary.all()
-        dictionarySuggestions = dictionary.pendingSuggestions()
+    func refreshLanguageMemory() {
+        languageMemory.refresh()
+        objectWillChange.send()
     }
 
-    func addDictionaryWord(_ word: String, soundsLike: String?) {
-        let alias = (soundsLike?.isEmpty == false) ? soundsLike : nil
-        dictionary.add(word: word, soundsLike: alias)
-        refreshDictionary()
+    // MARK: - Scratchpad
+
+    func refreshScratchpad() {
+        scratchpad.refresh()
+        objectWillChange.send()
     }
 
-    func removeDictionaryEntry(_ id: UUID) {
-        dictionary.remove(id: id)
-        refreshDictionary()
+    func sendToScratchpad(_ record: DictationRecord) {
+        scratchpad.appendTextToSelectedOrCreate(record.text)
     }
 
-    func acceptSuggestion(_ term: String) {
-        dictionary.accept(term)
-        refreshDictionary()
+    func reprocessHistoryWithLanguageMemory(_ record: DictationRecord) {
+        if let onReprocessHistory {
+            onReprocessHistory(record)
+            return
+        }
+        reprocessHistoryTextOnly(record)
     }
 
-    func dismissSuggestion(_ term: String) {
-        dictionary.dismiss(term)
-        refreshDictionary()
-    }
-
-    // MARK: - Snippets
-
-    func refreshSnippets() { snippets = snippetStore.all() }
-
-    func addSnippet(trigger: String, expansion: String) {
-        snippetStore.add(trigger: trigger, expansion: expansion)
-        refreshSnippets()
-    }
-
-    func removeSnippet(_ id: UUID) {
-        snippetStore.remove(id: id)
-        refreshSnippets()
-    }
-
-    // MARK: - Notes
-
-    func refreshNotes() { notes = notesStore.all() }
-
-    func addNote(_ text: String) {
-        notesStore.add(text: text, createdAt: Date())
-        refreshNotes()
-    }
-
-    func removeNote(_ id: UUID) {
-        notesStore.remove(id: id)
-        refreshNotes()
-    }
-
-    func updateNote(_ id: UUID, text: String) {
-        notesStore.update(id: id, text: text)
-        refreshNotes()
+    func reprocessHistoryTextOnly(_ record: DictationRecord) {
+        let snapshot = languageMemory.exportSnapshot()
+        let language = MemoryLanguage(languagePin: languagePin)
+        let source = record.rawText ?? record.text
+        let result = LanguageMemoryPostProcessor.rawResult(
+            for: source,
+            snapshot: snapshot,
+            language: language
+        )
+        let next = DictationRecord(
+            text: result.text,
+            createdAt: Date(),
+            language: record.language,
+            provider: "\(record.provider) reprocess",
+            durationSeconds: record.durationSeconds,
+            mode: .raw,
+            rawText: source,
+            intermediateText: record.text,
+            memoryHitIDs: result.memoryHitIDs.isEmpty ? nil : result.memoryHitIDs,
+            replacementRuleIDs: result.replacementRuleIDs.isEmpty ? nil : result.replacementRuleIDs,
+            snippetIDs: result.snippetIDs.isEmpty ? nil : result.snippetIDs
+        )
+        history.append(next)
+        languageMemory.recordUsage(
+            termIDs: result.memoryHitIDs,
+            replacementRuleIDs: result.replacementRuleIDs,
+            snippetIDs: result.snippetIDs
+        )
+        refreshRecent()
+        refreshCost()
     }
 }

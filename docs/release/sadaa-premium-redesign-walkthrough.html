@@ -1,0 +1,288 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Sadaa Premium Redesign Walkthrough</title>
+  <style>
+    :root {
+      --navy: #1e3a5f;
+      --navy-deep: #12243b;
+      --gold: #d4a853;
+      --cream: #faf7f2;
+      --surface: #fffdfb;
+      --sage: #5b8a72;
+      --ink: #2d3748;
+      color-scheme: light;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font: 14px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+      color: var(--ink);
+      background: var(--cream);
+    }
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: 260px 1fr;
+    }
+    aside {
+      background: var(--navy-deep);
+      color: var(--cream);
+      padding: 24px 16px;
+    }
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      color: var(--gold);
+      font-size: 22px;
+      font-weight: 800;
+      margin-bottom: 22px;
+    }
+    button.nav {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      border: 0;
+      border-radius: 8px;
+      padding: 10px 12px;
+      margin: 4px 0;
+      color: var(--cream);
+      background: transparent;
+      text-align: left;
+      cursor: pointer;
+      font: inherit;
+    }
+    button.nav.active {
+      color: var(--navy-deep);
+      background: var(--gold);
+      font-weight: 700;
+    }
+    main {
+      padding: 28px;
+      overflow: auto;
+    }
+    .panel {
+      max-width: 980px;
+      display: none;
+      animation: fade .16s ease-out;
+    }
+    .panel.active { display: block; }
+    h1 {
+      margin: 0 0 8px;
+      font-size: 28px;
+      letter-spacing: 0;
+    }
+    h2 {
+      margin: 24px 0 10px;
+      font-size: 16px;
+      color: var(--navy);
+    }
+    .badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0 22px;
+    }
+    .badge {
+      border: 1px solid color-mix(in srgb, var(--tint) 30%, transparent);
+      border-radius: 999px;
+      color: var(--tint);
+      background: color-mix(in srgb, var(--tint) 12%, transparent);
+      padding: 5px 10px;
+      font-size: 12px;
+      font-weight: 700;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 12px;
+    }
+    .card {
+      background: var(--surface);
+      border: 1px solid rgba(212,168,83,.22);
+      border-radius: 8px;
+      padding: 14px;
+    }
+    .card strong {
+      display: block;
+      color: var(--navy);
+      margin-bottom: 5px;
+    }
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .step {
+      background: var(--navy);
+      color: var(--cream);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 86px;
+    }
+    .step b { color: var(--gold); }
+    .demo {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-top: 14px;
+    }
+    textarea, input, select {
+      width: 100%;
+      border: 1px solid rgba(30,58,95,.22);
+      border-radius: 8px;
+      padding: 10px;
+      font: inherit;
+      background: white;
+      color: var(--ink);
+    }
+    textarea { min-height: 140px; resize: vertical; }
+    .primary {
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: var(--navy);
+      color: var(--cream);
+      font-weight: 700;
+      cursor: pointer;
+      margin-top: 8px;
+    }
+    .output {
+      white-space: pre-wrap;
+      background: var(--surface);
+      border: 1px solid rgba(91,138,114,.35);
+      border-radius: 8px;
+      padding: 12px;
+      min-height: 140px;
+    }
+    .blocked {
+      border-color: rgba(180, 74, 52, .35);
+      background: #fff8f5;
+    }
+    @keyframes fade { from { opacity: 0; transform: translateY(4px); } }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; }
+      aside { position: sticky; top: 0; z-index: 2; }
+      .demo { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside>
+      <div class="brand">◼ Sadaa</div>
+      <button class="nav active" data-target="overview">Overview</button>
+      <button class="nav" data-target="memory">Language Memory</button>
+      <button class="nav" data-target="scratchpad">Scratchpad</button>
+      <button class="nav" data-target="history">History</button>
+      <button class="nav" data-target="models">Models</button>
+      <button class="nav" data-target="verify">Verification</button>
+    </aside>
+    <main>
+      <section id="overview" class="panel active">
+        <h1>Premium Redesign</h1>
+        <p>Sadaa is now structured as a local-first voice cockpit: start dictation quickly, keep personal language rules visible, capture notes, and recover or improve prior dictations.</p>
+        <div class="badges">
+          <span class="badge" style="--tint: var(--sage)">Home readiness</span>
+          <span class="badge" style="--tint: var(--navy)">Language Memory</span>
+          <span class="badge" style="--tint: var(--gold)">Scratchpad</span>
+          <span class="badge" style="--tint: var(--sage)">History actions</span>
+        </div>
+        <div class="grid">
+          <div class="card"><strong>Home</strong>Azure readiness, language, hotkeys, memory count, usage, recent dictations.</div>
+          <div class="card"><strong>HUD</strong>Clear dictation and voice-edit states: listening, transcribing, inserting, rewriting, replacing.</div>
+          <div class="card"><strong>Settings</strong>Fast/Accurate/Speech/Legacy presets with a redacted Azure health probe.</div>
+        </div>
+      </section>
+
+      <section id="memory" class="panel">
+        <h1>Language Memory</h1>
+        <p>The old dictionary is replaced by a stronger system: terms, pronunciations, aliases, priority, language targeting, usage-aware biasing, pause/resume controls, live-preview deterministic replacements, deterministic snippets, suggestions, and history memory/snippet-hit diagnostics. Raw-mode dictation still applies local deterministic memory without calling GPT.</p>
+        <div class="flow">
+          <div class="step"><b>1.</b><br>Add a term like Karko AI with priority, language, and sounds-like hints.</div>
+          <div class="step"><b>2.</b><br>Add a replacement like cloud code → Claude Code, then pause experiments without deleting them.</div>
+          <div class="step"><b>3.</b><br>Create snippets for repeated spoken phrases; they expand before/after formatting, in raw mode, and when the formatter falls back.</div>
+          <div class="step"><b>4.</b><br>Copy/import JSON and CSV, then see memory/snippet hits in History and used-count badges in Language Memory.</div>
+        </div>
+        <div class="demo">
+          <div>
+            <h2>Try replacement logic</h2>
+            <input id="match" value="cloud code">
+            <input id="replace" value="Claude Code">
+            <textarea id="memoryInput">I use cloud code for coding tasks, but cloudflare should stay unchanged.</textarea>
+            <button class="primary" id="runMemory">Apply</button>
+          </div>
+          <div>
+            <h2>Output</h2>
+            <div class="output" id="memoryOutput"></div>
+          </div>
+        </div>
+      </section>
+
+      <section id="scratchpad" class="panel">
+        <h1>Scratchpad</h1>
+        <p>Notes are now a local workspace with pinned notes, tags, auto-save drafts, word and character stats, markdown copy, JSON backup/restore, duplication, and append-latest-dictation.</p>
+        <div class="grid">
+          <div class="card"><strong>Capture</strong>Focus the editor and dictate directly into a note.</div>
+          <div class="card"><strong>Organize</strong>Pin notes, search title/body/tags, scan word counts, duplicate drafts.</div>
+          <div class="card"><strong>Reuse</strong>Copy one note, export all notes as Markdown, restore a JSON backup, or append latest dictation into the selected note.</div>
+        </div>
+      </section>
+
+      <section id="history" class="panel">
+        <h1>History Actions</h1>
+        <p>History rows now expose the recovery actions that matter during real use.</p>
+        <div class="grid">
+          <div class="card"><strong>Copy</strong>Quickly restore any past dictation.</div>
+          <div class="card"><strong>Send To Scratchpad</strong>Move useful text into notes without re-dictating.</div>
+          <div class="card"><strong>Reprocess</strong>Re-run retained audio when available, then apply current Language Memory.</div>
+          <div class="card"><strong>Learn Correction</strong>Turn a bad output into a term or replacement rule.</div>
+        </div>
+      </section>
+
+      <section id="models" class="panel">
+        <h1>Model Guidance</h1>
+        <div class="grid">
+          <div class="card"><strong>Fast</strong>Use your gpt-4o-mini-transcribe deployment, or the newest mini transcribe variant your region exposes.</div>
+          <div class="card"><strong>Accurate</strong>Use gpt-4o-transcribe when maximum quality matters.</div>
+          <div class="card"><strong>Speech/MAI</strong>Use mai-transcribe-1.5 where your Azure Speech resource supports it.</div>
+          <div class="card"><strong>Realtime</strong>Keep realtime audio models for future streaming workflows; Sadaa's current hotkey flow is file-based transcription.</div>
+          <div class="card"><strong>Legacy</strong>Use whisper only as a compatibility fallback.</div>
+        </div>
+      </section>
+
+      <section id="verify" class="panel">
+        <h1>Verification</h1>
+        <div class="grid">
+          <div class="card"><strong>Completed</strong>Private-folder source audit, secret-path audit, conflict-marker scan, adversarial review, completion audit, release notes.</div>
+          <div class="card blocked"><strong>Blocked</strong>Swift build/test, bundle launch, install, Git commit, and push all require Command Line Tools or Xcode to be restored.</div>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script>
+    const buttons = [...document.querySelectorAll('.nav')];
+    const panels = [...document.querySelectorAll('.panel')];
+    buttons.forEach(button => {
+      button.addEventListener('click', () => {
+        buttons.forEach(item => item.classList.toggle('active', item === button));
+        panels.forEach(panel => panel.classList.toggle('active', panel.id === button.dataset.target));
+      });
+    });
+    document.querySelector('#runMemory').addEventListener('click', () => {
+      const match = document.querySelector('#match').value.trim();
+      const replacement = document.querySelector('#replace').value;
+      const input = document.querySelector('#memoryInput').value;
+      const escaped = match.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`\\b${escaped}\\b`, 'gi');
+      document.querySelector('#memoryOutput').textContent = input.replace(regex, replacement);
+    });
+    document.querySelector('#runMemory').click();
+  </script>
+</body>
+</html>

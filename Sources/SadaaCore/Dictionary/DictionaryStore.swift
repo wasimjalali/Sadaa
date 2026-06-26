@@ -89,6 +89,13 @@ public final class DictionaryStore {
         }
     }
 
+    public func pendingSuggestionEvidence() -> [(term: String, evidenceCount: Int)] {
+        pendingSuggestions().map { term in
+            let count = pendingCounts[TermMatcher.canonical(term)] ?? 1
+            return (term: term, evidenceCount: max(1, count))
+        }
+    }
+
     /// Queues formatter-guessed terms that pass quality filters, are not
     /// already personal, not BaseVocabulary terms, and not dismissed.
     /// When a term canonically matches an already-pending term, bumps that

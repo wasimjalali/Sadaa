@@ -20,6 +20,9 @@ import Foundation
         #expect(settings.recordingsToKeep == 10)
         #expect(settings.azureEndpoint == "")
         #expect(settings.azureDeployment == "")
+        #expect(settings.transcriptionPreset == .fast)
+        #expect(settings.fastTranscriptionDeployment == "gpt-4o-mini-transcribe")
+        #expect(settings.accurateTranscriptionDeployment == "gpt-4o-transcribe")
         #expect(settings.hotkeyKeycode == 54)          // Right Command
         #expect(settings.voiceEditKeycode == 61)       // Right Option
         #expect(settings.languageSwitchKeycode == 60)  // Right Shift (under Return)
@@ -29,6 +32,9 @@ import Foundation
     @Test func testRoundTrip() {
         settings.azureEndpoint = "https://myres.openai.azure.com"
         settings.azureDeployment = "whisper"
+        settings.transcriptionPreset = .accurate
+        settings.fastTranscriptionDeployment = "fast"
+        settings.accurateTranscriptionDeployment = "accurate"
         settings.languagePin = .de
         settings.silenceTimeout = 45.5
         settings.recordingsToKeep = 5
@@ -37,6 +43,9 @@ import Foundation
         settings.languageSwitchKeycode = 63
         #expect(settings.azureEndpoint == "https://myres.openai.azure.com")
         #expect(settings.azureDeployment == "whisper")
+        #expect(settings.transcriptionPreset == .accurate)
+        #expect(settings.fastTranscriptionDeployment == "fast")
+        #expect(settings.accurateTranscriptionDeployment == "accurate")
         #expect(settings.languagePin == .de)
         #expect(settings.silenceTimeout == 45.5)
         #expect(settings.recordingsToKeep == 5)

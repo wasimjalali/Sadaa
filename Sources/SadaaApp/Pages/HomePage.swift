@@ -52,7 +52,7 @@ struct HomePage: View {
 
                 todayStrip
 
-                statusChips
+                readinessBadges
 
                 recentSection
 
@@ -143,15 +143,27 @@ struct HomePage: View {
 
     // MARK: - Status chips
 
-    private var statusChips: some View {
-        HStack(spacing: 10) {
-            StatusCapsule(
-                dotColor: viewModel.azureConfigured ? Theme.sage : Theme.gold,
-                text: viewModel.azureConfigured ? "Azure connected" : "Not configured. Open Settings."
+    private var readinessBadges: some View {
+        HStack(spacing: 8) {
+            PremiumStatusBadge(
+                icon: viewModel.azureConfigured ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                text: viewModel.azureConfigured ? "Azure ready" : "Azure setup needed",
+                tint: viewModel.azureConfigured ? Theme.sage : Theme.gold
             )
-            StatusCapsule(
+            PremiumStatusBadge(
                 icon: "globe",
-                text: PageFormat.languageLabel(viewModel.languagePin)
+                text: PageFormat.languageLabel(viewModel.languagePin),
+                tint: Theme.navy
+            )
+            PremiumStatusBadge(
+                icon: viewModel.hotkeyActive ? "keyboard.fill" : "keyboard",
+                text: viewModel.hotkeyActive ? "Hotkeys active" : "Grant Accessibility",
+                tint: viewModel.hotkeyActive ? Theme.sage : Theme.gold
+            )
+            PremiumStatusBadge(
+                icon: "text.book.closed",
+                text: "\(viewModel.languageMemory.terms.count) memory terms",
+                tint: Theme.navy
             )
         }
         .frame(maxWidth: 520)
