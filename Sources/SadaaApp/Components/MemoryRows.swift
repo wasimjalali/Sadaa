@@ -13,7 +13,7 @@ struct MemoryTermRow: View {
             VStack(alignment: .leading, spacing: 4) {
                 Text(term.phrase)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.charcoal)
+                    .foregroundStyle(Theme.ink)
                 HStack(spacing: 6) {
                     PremiumStatusBadge(text: priorityTitle(term.priority),
                                        tint: term.priority == .always ? Theme.gold : Theme.navy)
@@ -27,13 +27,13 @@ struct MemoryTermRow: View {
                 if !term.pronunciations.isEmpty || !term.aliases.isEmpty {
                     Text((term.pronunciations + term.aliases).joined(separator: ", "))
                         .font(.system(size: 11))
-                        .foregroundStyle(Theme.charcoal.opacity(0.58))
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(2)
                 }
                 if !term.notes.isEmpty {
                     Text(term.notes)
                         .font(.system(size: 11))
-                        .foregroundStyle(Theme.charcoal.opacity(0.55))
+                        .foregroundStyle(Theme.muted)
                         .lineLimit(2)
                 }
             }
@@ -45,7 +45,8 @@ struct MemoryTermRow: View {
             .help("Remove term")
         }
         .padding(12)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
     }
 }
 
@@ -57,20 +58,20 @@ struct ReplacementRuleRow: View {
     var body: some View {
         HStack(alignment: .center, spacing: 10) {
             Image(systemName: rule.isEnabled ? "arrow.left.arrow.right" : "pause.circle")
-                .foregroundStyle(rule.isEnabled ? Theme.sage : Theme.charcoal.opacity(0.4))
+                .foregroundStyle(rule.isEnabled ? Theme.sage : Theme.muted)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 3) {
                 Text(rule.match)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.charcoal)
+                    .foregroundStyle(Theme.ink)
                 Text(rule.replacement)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.charcoal.opacity(0.62))
+                    .foregroundStyle(Theme.muted)
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
                 if !rule.isEnabled {
-                    PremiumStatusBadge(text: "Paused", tint: Theme.charcoal.opacity(0.45))
+                    PremiumStatusBadge(text: "Paused", tint: Theme.muted)
                 }
                 PremiumStatusBadge(text: matchModeTitle(rule.matchMode), tint: Theme.navy)
                 if rule.language != .auto {
@@ -92,7 +93,8 @@ struct ReplacementRuleRow: View {
             .help("Remove replacement")
         }
         .padding(12)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
     }
 }
 
@@ -104,15 +106,15 @@ struct MemorySnippetRow: View {
     var body: some View {
         HStack(alignment: .top, spacing: 10) {
             Image(systemName: snippet.isEnabled ? "text.badge.plus" : "pause.circle")
-                .foregroundStyle(snippet.isEnabled ? Theme.gold : Theme.charcoal.opacity(0.4))
+                .foregroundStyle(snippet.isEnabled ? Theme.gold : Theme.muted)
                 .frame(width: 18)
             VStack(alignment: .leading, spacing: 4) {
                 Text(snippet.trigger)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.charcoal)
+                    .foregroundStyle(Theme.ink)
                 Text(snippet.expansion)
                     .font(.system(size: 12))
-                    .foregroundStyle(Theme.charcoal.opacity(0.62))
+                    .foregroundStyle(Theme.muted)
                     .lineLimit(3)
                 if !snippet.tags.isEmpty {
                     Text(snippet.tags.map { "#\($0)" }.joined(separator: " "))
@@ -120,7 +122,7 @@ struct MemorySnippetRow: View {
                         .foregroundStyle(Theme.sage)
                 }
                 if !snippet.isEnabled {
-                    PremiumStatusBadge(text: "Paused", tint: Theme.charcoal.opacity(0.45))
+                    PremiumStatusBadge(text: "Paused", tint: Theme.muted)
                 }
                 if snippet.language != .auto {
                     PremiumStatusBadge(text: languageTitle(snippet.language), tint: Theme.sage)
@@ -142,7 +144,8 @@ struct MemorySnippetRow: View {
             .help("Remove snippet")
         }
         .padding(12)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
     }
 }
 
@@ -183,10 +186,10 @@ struct MemorySuggestionRow: View {
             VStack(alignment: .leading, spacing: 3) {
                 Text(suggestion.proposed)
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.charcoal)
-                Text("\(suggestion.evidenceCount) signals")
+                    .foregroundStyle(Theme.ink)
+                Text("\(suggestion.evidenceCount) signals from \(sourceTitle(suggestion.source))")
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.charcoal.opacity(0.55))
+                    .foregroundStyle(Theme.muted)
             }
             Spacer()
             Button(action: onAccept) {
@@ -201,6 +204,16 @@ struct MemorySuggestionRow: View {
             .help("Dismiss suggestion")
         }
         .padding(12)
-        .background(Theme.cream, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
+
+private func sourceTitle(_ source: MemorySuggestionSource) -> String {
+    switch source {
+    case .formatter: return "formatter"
+    case .historyCorrection: return "history"
+    case .manualImport: return "import"
+    case .reprocess: return "reprocess"
     }
 }
