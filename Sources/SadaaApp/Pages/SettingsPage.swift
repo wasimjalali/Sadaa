@@ -4,8 +4,8 @@ import AVFoundation
 import Combine
 import SadaaCore
 
-/// The windowed settings. Every input is an explicitly labelled, bordered box so
-/// it is obvious where to click and paste. Sections are cards on the cream page.
+/// Flat local control room for provider setup, formatting, hotkeys, permissions,
+/// usage, and storage.
 struct SettingsPage: View {
     let settings: AppSettings
     @ObservedObject var viewModel: SadaaViewModel
@@ -34,173 +34,176 @@ struct SettingsPage: View {
     private let permissionTimer = Timer.publish(every: 1.5, on: .main, in: .common)
         .autoconnect()
 
+    private var localDataURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+            .appendingPathComponent("Sadaa")
+    }
+
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("Settings")
-                    .font(.system(size: 24, weight: .bold))
-                    .foregroundStyle(Theme.charcoal)
-
-                // Ordered by how often you actually touch it: the daily controls
-                // up top, one-time setup and troubleshooting toward the bottom.
-                hotkeyCard
-                languageCard
-                formattingCard
-                providerPresetCard
-                azureCard
-                costCard
-                generalCard
-                permissionsCard
+            VStack(alignment: .leading, spacing: 22) {
+                header
+                systemStrip
+                settingsSurface
             }
-            .padding(28)
-            .frame(maxWidth: 600, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .topLeading)
+            .padding(30)
+            .frame(maxWidth: 1120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        .background(Theme.cream)
         .onAppear(perform: load)
         .onReceive(permissionTimer) { _ in refreshPermissions() }
     }
 
-    // MARK: - Reusable building blocks
-
-    private func card<Content: View>(_ title: String,
-                                     icon: String? = nil,
-                                     @ViewBuilder _ content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 10) {
+    private var header: some View {
+        CommandPageHeader(
+            eyebrow: "Local Control Room",
+            title: "Settings",
+            subtitle: "One place for Azure, formatting, language, hotkeys, permissions, local storage, and cost awareness."
+        ) {
             HStack(spacing: 8) {
-                if let icon {
-                    Image(systemName: icon)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(Theme.gold)
+                Button {
+                    save()
+                } label: {
+                    Label("Save", systemImage: "checkmark.circle.fill")
                 }
-                Text(title)
-                    .font(.system(size: 16, weight: .bold))
-                    .foregroundStyle(Theme.navy)
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: true))
+                .keyboardShortcut(.defaultAction)
+
+                Button {
+                    checkProviderConfiguration()
+                } label: {
+                    Label("Test", systemImage: "waveform.badge.magnifyingglass")
+                }
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.gold, filled: false))
+
+                savedBadge(saved && launchError.isEmpty && rateError.isEmpty)
             }
-            Rectangle()
-                .fill(Theme.gold.opacity(0.22))
-                .frame(height: 1)
-                .padding(.bottom, 2)
-            content()
         }
-        .padding(18)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.creamSurface)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
-        )
     }
 
-    private func field(_ label: String, _ placeholder: String,
-                       _ text: Binding<String>, secure: Bool = false) -> some View {
-        VStack(alignment: .leading, spacing: 5) {
-            Text(label)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.charcoal.opacity(0.85))
-            Group {
-                if secure {
-                    SecureField(placeholder, text: text)
-                } else {
-                    TextField(placeholder, text: text)
+    private var systemStrip: some View {
+        LazyVGrid(
+            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+            spacing: 12
+        ) {
+            CommandMetric(
+                icon: viewModel.azureConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
+                value: viewModel.azureConfigured ? "Ready" : "Needs setup",
+                label: "Azure transcription",
+                tint: viewModel.azureConfigured ? Theme.sage : Theme.warning
+            )
+            CommandMetric(
+                icon: viewModel.hotkeyActive ? "keyboard.fill" : "keyboard",
+                value: viewModel.hotkeyActive ? "Active" : "Off",
+                label: "global hotkeys",
+                tint: viewModel.hotkeyActive ? Theme.sage : Theme.warning
+            )
+            CommandMetric(
+                icon: "clock",
+                value: PageFormat.minutes(viewModel.monthlyCost.minutes),
+                label: "monthly audio",
+                tint: Theme.navy
+            )
+            CommandMetric(
+                icon: "creditcard",
+                value: PageFormat.dollars(viewModel.monthlyCost.cost),
+                label: "estimated spend",
+                tint: Theme.gold
+            )
+        }
+    }
+
+    private var settingsSurface: some View {
+        CommandPanel {
+            VStack(alignment: .leading, spacing: 0) {
+                SettingsBand(icon: "cloud.fill",
+                             title: "Azure",
+                             detail: "Transcription endpoint, deployment, version, and Keychain secret.") {
+                    azureControls
+                }
+                settingsDivider
+                SettingsBand(icon: "speedometer",
+                             title: "Models",
+                             detail: "Focused presets for speed or accuracy, without extra provider clutter.") {
+                    modelControls
+                }
+                settingsDivider
+                SettingsBand(icon: "sparkles",
+                             title: "Formatting",
+                             detail: "AI-specialist cleanup, terminology context, and language behavior.") {
+                    formattingControls
+                }
+                settingsDivider
+                SettingsBand(icon: "keyboard.fill",
+                             title: "Hotkeys",
+                             detail: "Three distinct tap keys for dictation, voice edit, and language switching.") {
+                    hotkeyControls
+                }
+                settingsDivider
+                SettingsBand(icon: "slider.horizontal.3",
+                             title: "Local App",
+                             detail: "Startup behavior, sound, monthly estimates, permissions, and data location.") {
+                    localControls
                 }
             }
-            .textFieldStyle(.roundedBorder)
-            .font(.system(size: 13))
         }
     }
 
-    private func hint(_ text: String) -> some View {
-        Text(text)
-            .font(.caption)
-            .foregroundStyle(Theme.charcoal.opacity(0.6))
-            .fixedSize(horizontal: false, vertical: true)
+    private var settingsDivider: some View {
+        Rectangle()
+            .fill(Theme.line)
+            .frame(height: 1)
+            .padding(.vertical, 18)
     }
 
-    /// Small colored status pill. Sage means good, gold means needs attention.
-    private func statusCapsule(_ text: String, good: Bool) -> some View {
-        let tint = good ? Theme.sage : Theme.gold
-        return HStack(spacing: 6) {
-            Circle()
-                .fill(tint)
-                .frame(width: 7, height: 7)
-            Text(text)
-                .font(.caption)
-                .foregroundStyle(Theme.charcoal.opacity(0.75))
-        }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .background(
-            Capsule().fill(tint.opacity(0.12))
-        )
-        .overlay(
-            Capsule().strokeBorder(tint.opacity(0.35), lineWidth: 1)
-        )
-    }
-
-    /// A labelled control row (picker or toggle) that picks up a soft cream
-    /// highlight on hover, so the interactive area reads as a single unit.
-    private func controlRow<Content: View>(_ label: String,
-                                           @ViewBuilder _ content: () -> Content) -> some View {
-        HoverHighlightRow(
-            VStack(alignment: .leading, spacing: 5) {
-                Text(label)
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
-                content()
+    private var azureControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                settingsField("Endpoint", "https://your-resource.services.ai.azure.com", $endpoint)
+                settingsField("API version", "2025-03-01-preview", $apiVersion)
+                settingsField("Active transcription deployment", "gpt-4o-mini-transcribe", $deployment)
+                settingsField("API key", "Stored in Keychain", $apiKey, secure: true)
             }
-        )
-    }
 
-    /// Transient "Saved" confirmation shown next to a save button. Fades in and
-    /// out and only appears when `visible`, so callers gate it on no validation
-    /// error having fired.
-    private func savedBadge(_ visible: Bool) -> some View {
-        Label("Saved", systemImage: "checkmark.circle.fill")
-            .font(.caption.weight(.semibold))
-            .foregroundStyle(Theme.sage)
-            .symbolEffect(.bounce, value: visible)
-            .opacity(visible ? 1 : 0)
-            .scaleEffect(visible ? 1 : 0.92)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: visible)
-    }
-
-    // MARK: - Cards
-
-    private var azureCard: some View {
-        card("Azure OpenAI / Foundry", icon: "cloud") {
-            field("Endpoint", "https://your-resource.services.ai.azure.com", $endpoint)
-            field("Transcription deployment", "gpt-4o-mini-transcribe", $deployment)
-            field("API version", "2025-03-01-preview", $apiVersion)
-            field("API key", "paste your key", $apiKey, secure: true)
-            hint("Works with Azure OpenAI and Azure AI Foundry. The Foundry project URL also works. The deployment is your transcription model, not the chat one. Keys are saved in your macOS Keychain.")
             HStack(spacing: 10) {
-                Button("Save") { save() }
-                    .buttonStyle(.borderedProminent)
-                    .tint(Theme.navy)
-                    .keyboardShortcut(.defaultAction)
-                Button("Test Azure") { checkProviderConfiguration() }
-                    .buttonStyle(SettingsBorderedButtonStyle())
-                savedBadge(saved && rateError.isEmpty)
-            }
-            if let providerHealth {
-                statusCapsule(
-                    "\(providerHealth.providerName): \(providerHealth.message) \(providerHealth.redactedEndpoint)",
-                    good: providerHealth.ok
-                )
+                Button {
+                    save()
+                } label: {
+                    Label("Save Azure", systemImage: "checkmark")
+                }
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: true))
+
+                Button {
+                    checkProviderConfiguration()
+                } label: {
+                    Label("Test Azure", systemImage: "waveform.badge.magnifyingglass")
+                }
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.gold, filled: false))
+
+                if let providerHealth {
+                    PremiumStatusBadge(
+                        icon: providerHealth.ok ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                        text: "\(providerHealth.providerName): \(providerHealth.message)",
+                        tint: providerHealth.ok ? Theme.sage : Theme.warning
+                    )
+                } else {
+                    PremiumStatusBadge(icon: "lock.fill", text: "Keychain secured", tint: Theme.navy)
+                }
             }
         }
     }
 
-    private var providerPresetCard: some View {
-        card("Transcription model", icon: "speedometer") {
+    private var modelControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
             Picker("Preset", selection: $preset) {
                 ForEach(TranscriptionPreset.allCases, id: \.self) { option in
                     Text(presetLabel(option)).tag(option)
                 }
             }
             .pickerStyle(.segmented)
+            .labelsHidden()
+            .frame(maxWidth: 360)
             .onChange(of: preset) { _, newValue in
                 switch newValue {
                 case .fast:
@@ -209,133 +212,188 @@ struct SettingsPage: View {
                     deployment = accurateDeployment
                 }
             }
-            HStack(spacing: 8) {
-                field("Fast deployment", "gpt-4o-mini-transcribe", $fastDeployment)
-                field("Accurate deployment", "gpt-4o-transcribe", $accurateDeployment)
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                settingsField("Fast deployment", "gpt-4o-mini-transcribe", $fastDeployment)
+                settingsField("Accurate deployment", "gpt-4o-transcribe", $accurateDeployment)
             }
-            hint("Recommended: Fast uses your Azure deployment of gpt-4o-mini-transcribe or the newest mini transcribe variant available in your region; Accurate uses gpt-4o-transcribe when quality matters most. Realtime models are for future streaming/live transcription, not this file-based hotkey flow.")
         }
     }
 
-    private var formattingCard: some View {
-        card("Smart formatting", icon: "wand.and.stars") {
-            Toggle("Format dictations with GPT", isOn: $formattingEnabled)
-                .tint(Theme.navy)
-                // Write through immediately, same as the menu-bar toggle. Save
-                // must not write this back, or a menu toggle made while this
-                // page sits open would be silently reverted.
+    private var formattingControls: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(alignment: .top, spacing: 14) {
+                SettingsToggleRow(
+                    title: "Smart formatting",
+                    detail: formattingEnabled ? "Enabled" : "Raw transcript mode",
+                    isOn: $formattingEnabled
+                )
                 .onChange(of: formattingEnabled) { _, isOn in
                     settings.formattingEnabled = isOn
                 }
-            field("GPT deployment", "gpt-4o-mini", $gptDeployment)
-            VStack(alignment: .leading, spacing: 5) {
+
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Language")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(Theme.muted)
+                    Picker("", selection: languageBinding) {
+                        ForEach(LanguagePin.allCases, id: \.self) { pin in
+                            Text(PageFormat.languageLabel(pin)).tag(pin)
+                        }
+                    }
+                    .pickerStyle(.segmented)
+                    .labelsHidden()
+                }
+                .frame(maxWidth: 340)
+            }
+
+            settingsField("GPT formatting deployment", "gpt-4o-mini", $gptDeployment)
+
+            VStack(alignment: .leading, spacing: 8) {
                 Text("Speaker context")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.charcoal.opacity(0.85))
+                    .font(.system(size: 11, weight: .bold))
+                    .foregroundStyle(Theme.muted)
                 TextEditor(text: $speakerContext)
-                    .frame(minHeight: 70)
                     .font(.system(size: 12))
-                    .padding(6)
-                    .background(Color.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 6))
-                    .overlay(RoundedRectangle(cornerRadius: 6)
-                        .strokeBorder(Theme.charcoal.opacity(0.2), lineWidth: 1))
+                    .scrollContentBackground(.hidden)
+                    .padding(8)
+                    .frame(minHeight: 92)
+                    .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
             }
-            hint("Hold Shift when you stop to skip formatting for one dictation.")
         }
     }
 
-    private var languageCard: some View {
-        card("Language", icon: "globe") {
-            controlRow("Dictation language") {
-                Picker("", selection: languageBinding) {
-                    ForEach(LanguagePin.allCases, id: \.self) { pin in
-                        Text(PageFormat.languageLabel(pin)).tag(pin)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .labelsHidden()
+    private var hotkeyControls: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                hotkeyPicker("Dictation", selection: hotkeyBinding)
+                hotkeyPicker("Voice edit", selection: voiceEditBinding)
+                hotkeyPicker("Language", selection: languageSwitchBinding)
             }
-            hint("Also available from the menu-bar icon. Auto-detect handles most cases; pin English or German if you switch a lot.")
+
+            PremiumStatusBadge(
+                icon: viewModel.hotkeyActive ? "checkmark.circle.fill" : "exclamationmark.triangle.fill",
+                text: viewModel.hotkeyActive ? "Hotkeys active" : "Accessibility needed",
+                tint: viewModel.hotkeyActive ? Theme.sage : Theme.warning
+            )
         }
     }
 
-    private var costCard: some View {
-        card("Usage and cost", icon: "chart.bar") {
-            hint("This month: \(PageFormat.minutes(viewModel.monthlyCost.minutes)), about \(PageFormat.dollars(viewModel.monthlyCost.cost)). An estimate for credit awareness.")
-            field("Transcription rate ($/min)", "0.006", $transcriptionRate)
-            field("Formatter rate ($/1k chars)", "0.002", $formatterRate)
+    private var localControls: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            HStack(alignment: .top, spacing: 14) {
+                SettingsToggleRow(title: "Launch at login",
+                                  detail: launchAtLogin ? "Enabled" : "Manual launch",
+                                  isOn: $launchAtLogin)
+                SettingsToggleRow(title: "Sound effects",
+                                  detail: soundEffects ? "Chimes on" : "Silent",
+                                  isOn: $soundEffects)
+            }
+
+            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+                settingsField("Transcription rate ($/min)", "0.006", $transcriptionRate)
+                settingsField("Formatter rate ($/1k chars)", "0.002", $formatterRate)
+            }
+
             if !rateError.isEmpty {
-                Text(rateError).font(.caption).foregroundStyle(.red)
+                PremiumStatusBadge(icon: "exclamationmark.triangle.fill", text: rateError, tint: Theme.red)
             }
-        }
-    }
-
-    private var hotkeyCard: some View {
-        card("Hotkeys", icon: "keyboard") {
-            controlRow("Dictation key (tap to start and stop dictation)") {
-                Picker("", selection: hotkeyBinding) {
-                    ForEach(HotkeyOption.all) { option in
-                        Text(option.label).tag(option.keycode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: 240, alignment: .leading)
-            }
-            controlRow("Voice-edit key (tap to rewrite the selected text by voice)") {
-                Picker("", selection: voiceEditBinding) {
-                    ForEach(HotkeyOption.all) { option in
-                        Text(option.label).tag(option.keycode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: 240, alignment: .leading)
-            }
-            controlRow("Language key (tap to switch dictation between English and German)") {
-                Picker("", selection: languageSwitchBinding) {
-                    ForEach(HotkeyOption.all) { option in
-                        Text(option.label).tag(option.keycode)
-                    }
-                }
-                .pickerStyle(.menu)
-                .labelsHidden()
-                .frame(maxWidth: 240, alignment: .leading)
-            }
-            statusCapsule(viewModel.hotkeyActive
-                          ? "Hotkeys are active."
-                          : "Hotkeys are not active. Grant Accessibility below.",
-                          good: viewModel.hotkeyActive)
-            hint("Pick three different keys. Tap \(HotkeyOption.label(for: viewModel.languageSwitchKeycode)) any time to flip dictation between English and German; the language shows on screen. To voice-edit: select some text, tap \(HotkeyOption.label(for: viewModel.voiceEditKeycode)), speak your instruction (\"make it formal\", \"fix the grammar\"), then tap the key again. Cancel any recording with Esc.")
-        }
-    }
-
-    private var generalCard: some View {
-        card("General", icon: "gearshape") {
-            Toggle("Launch Sadaa at login", isOn: $launchAtLogin)
-                .tint(Theme.navy)
             if !launchError.isEmpty {
-                Text(launchError).font(.caption).foregroundStyle(.red)
+                PremiumStatusBadge(icon: "exclamationmark.triangle.fill", text: launchError, tint: Theme.red)
             }
-            Toggle("Play a soft chime when dictation starts and stops", isOn: $soundEffects)
-                .tint(Theme.navy)
-            HStack(spacing: 10) {
-                Button("Apply") { save() }
-                    .buttonStyle(SettingsBorderedButtonStyle())
-                savedBadge(saved && launchError.isEmpty && rateError.isEmpty)
+
+            HStack(alignment: .center, spacing: 10) {
+                permissionChip("Microphone", granted: micGranted, pane: "Privacy_Microphone")
+                permissionChip("Accessibility", granted: axTrusted, pane: "Privacy_Accessibility")
+
+                Spacer(minLength: 8)
+
+                Button {
+                    revealLocalData()
+                } label: {
+                    Label("Open Data Folder", systemImage: "folder")
+                }
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: false))
+
+                Button {
+                    save()
+                } label: {
+                    Label("Apply", systemImage: "checkmark")
+                }
+                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: true))
             }
         }
     }
 
-    private var permissionsCard: some View {
-        card("Permissions", icon: "lock.shield") {
-            permissionRow(title: "Microphone", granted: micGranted,
-                          pane: "Privacy_Microphone")
-            permissionRow(title: "Accessibility (for the hotkey)", granted: axTrusted,
-                          pane: "Privacy_Accessibility")
-            hint("Reinstalling the app can reset the Accessibility grant. If the hotkey stops working after an update, toggle Sadaa off and on in System Settings, Privacy and Security, Accessibility.")
+    // MARK: - Controls
+
+    private func settingsField(_ label: String,
+                               _ placeholder: String,
+                               _ text: Binding<String>,
+                               secure: Bool = false) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(label)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.muted)
+            Group {
+                if secure {
+                    SecureField(placeholder, text: text)
+                } else {
+                    TextField(placeholder, text: text)
+                }
+            }
+            .textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
         }
+    }
+
+    private func hotkeyPicker(_ title: String, selection: Binding<Int>) -> some View {
+        VStack(alignment: .leading, spacing: 7) {
+            Text(title)
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.muted)
+            Picker("", selection: selection) {
+                ForEach(HotkeyOption.all) { option in
+                    Text(option.label).tag(option.keycode)
+                }
+            }
+            .pickerStyle(.menu)
+            .labelsHidden()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(12)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+    }
+
+    private func permissionChip(_ title: String, granted: Bool, pane: String) -> some View {
+        Button {
+            if !granted { openPrivacyPane(pane) }
+        } label: {
+            HStack(spacing: 7) {
+                Image(systemName: granted ? "checkmark.circle.fill" : "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .bold))
+                Text(title)
+                    .font(.system(size: 11, weight: .bold))
+            }
+        }
+        .buttonStyle(SettingsCommandButtonStyle(tint: granted ? Theme.sage : Theme.warning, filled: false))
+        .help(granted ? "\(title) granted" : "Open \(title) privacy settings")
+    }
+
+    private func savedBadge(_ visible: Bool) -> some View {
+        Label("Saved", systemImage: "checkmark.circle.fill")
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(Theme.sage)
+            .opacity(visible ? 1 : 0)
+            .scaleEffect(visible ? 1 : 0.92)
+            .animation(.spring(response: 0.3, dampingFraction: 0.86), value: visible)
     }
 
     // MARK: - Bindings
@@ -371,19 +429,7 @@ struct SettingsPage: View {
         )
     }
 
-    // MARK: - Permissions
-
-    private func permissionRow(title: String, granted: Bool, pane: String) -> some View {
-        HStack(spacing: 10) {
-            Text(title).foregroundStyle(Theme.charcoal)
-            statusCapsule(granted ? "Granted" : "Needed", good: granted)
-            Spacer()
-            if !granted {
-                Button("Open Settings") { openPrivacyPane(pane) }
-                    .buttonStyle(SettingsBorderedButtonStyle())
-            }
-        }
-    }
+    // MARK: - Permissions and storage
 
     private func openPrivacyPane(_ pane: String) {
         if let url = URL(string:
@@ -395,6 +441,11 @@ struct SettingsPage: View {
     private func refreshPermissions() {
         micGranted = AVCaptureDevice.authorizationStatus(for: .audio) == .authorized
         axTrusted = AXIsProcessTrusted()
+    }
+
+    private func revealLocalData() {
+        try? FileManager.default.createDirectory(at: localDataURL, withIntermediateDirectories: true)
+        NSWorkspace.shared.activateFileViewerSelecting([localDataURL])
     }
 
     // MARK: - Load / save
@@ -425,19 +476,13 @@ struct SettingsPage: View {
         if !trimmedFastDeployment.isEmpty { settings.fastTranscriptionDeployment = trimmedFastDeployment }
         let trimmedAccurateDeployment = accurateDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedAccurateDeployment.isEmpty { settings.accurateTranscriptionDeployment = trimmedAccurateDeployment }
-        // A blank API version would persist an empty string and break every
-        // request; keep the stored value instead (the field re-syncs below).
         let trimmedAPIVersion = apiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
         if !trimmedAPIVersion.isEmpty { settings.azureAPIVersion = trimmedAPIVersion }
         saveKey(apiKey, account: "azure-openai-key")
-        // formattingEnabled writes through from its toggle, so a menu-bar
-        // toggle made while this page is open survives.
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
         settings.soundEffectsEnabled = soundEffects
 
-        // Validate rates instead of silently keeping the old value. Accept a
-        // comma decimal too, so "0,006" works.
         rateError = ""
         if let rate = parseRate(transcriptionRate) {
             settings.transcriptionRatePerMinute = rate
@@ -448,7 +493,7 @@ struct SettingsPage: View {
         if let rate = parseRate(formatterRate) {
             settings.formatterRatePer1kChars = rate
         } else if !formatterRate.trimmingCharacters(in: .whitespaces).isEmpty {
-            rateError = "Rates must be numbers, like 0.006."
+            rateError = "Rates must be numbers, like 0.002."
             formatterRate = String(settings.formatterRatePer1kChars)
         }
 
@@ -460,30 +505,24 @@ struct SettingsPage: View {
             launchAtLogin = LoginItem.isEnabled
         }
 
-        // Re-sync every field from what was actually stored, so a blanked
-        // box whose old value was kept (API version, models, rates) shows
-        // that value again instead of sitting empty under a green Saved badge.
         load()
-
         viewModel.refreshConfig()
         viewModel.refreshCost()
-        saved = rateError.isEmpty
+        saved = rateError.isEmpty && launchError.isEmpty
         if saved {
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
         }
     }
 
-    /// Writes a key, or removes it from the Keychain when the field is cleared,
-    /// so blanking a key actually revokes it.
     private func saveKey(_ value: String, account: String) {
-        if value.isEmpty {
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
             Keychain.delete(account: account)
         } else {
-            try? Keychain.set(value, account: account)
+            try? Keychain.set(trimmed, account: account)
         }
     }
 
-    /// Parses a rate, tolerating a comma decimal separator.
     private func parseRate(_ text: String) -> Double? {
         let normalized = text.trimmingCharacters(in: .whitespaces)
             .replacingOccurrences(of: ",", with: ".")
@@ -562,60 +601,91 @@ struct SettingsPage: View {
     }
 }
 
-/// Wraps a control row in a soft cream highlight that fades in on hover.
-private struct HoverHighlightRow<Content: View>: View {
+private struct SettingsBand<Content: View>: View {
+    let icon: String
+    let title: String
+    let detail: String
     let content: Content
-    @State private var hovering = false
 
-    init(_ content: Content) {
-        self.content = content
+    init(icon: String, title: String, detail: String, @ViewBuilder content: () -> Content) {
+        self.icon = icon
+        self.title = title
+        self.detail = detail
+        self.content = content()
     }
 
     var body: some View {
-        content
-            .padding(.horizontal, 8)
-            .padding(.vertical, 6)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(Theme.cream.opacity(hovering ? 0.8 : 0))
-            )
-            .contentShape(RoundedRectangle(cornerRadius: 9))
-            .onHover { hovering = $0 }
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
+        HStack(alignment: .top, spacing: 20) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(Theme.gold)
+                    .frame(width: 18)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(title)
+                        .font(.system(size: 15, weight: .bold))
+                        .foregroundStyle(Theme.navy)
+                    Text(detail)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+            .frame(width: 255, alignment: .leading)
+
+            content
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
     }
 }
 
-/// Bordered, navy-tinted secondary button with hover and pressed feedback.
-/// Used for the non-primary actions on the page so they feel consistent.
-private struct SettingsBorderedButtonStyle: ButtonStyle {
+private struct SettingsToggleRow: View {
+    let title: String
+    let detail: String
+    @Binding var isOn: Bool
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 12) {
+            VStack(alignment: .leading, spacing: 3) {
+                Text(title)
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundStyle(Theme.ink)
+                Text(detail)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+            }
+            Spacer(minLength: 10)
+            Toggle("", isOn: $isOn)
+                .toggleStyle(.switch)
+                .labelsHidden()
+                .tint(Theme.navy)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
+
+private struct SettingsCommandButtonStyle: ButtonStyle {
+    let tint: Color
+    var filled: Bool = false
+
     func makeBody(configuration: Configuration) -> some View {
-        SettingsBorderedButtonBody(configuration: configuration)
-    }
-}
-
-private struct SettingsBorderedButtonBody: View {
-    let configuration: ButtonStyle.Configuration
-    @State private var hovering = false
-
-    var body: some View {
         configuration.label
-            .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(Theme.navy)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 7)
+            .font(.system(size: 12, weight: .bold))
+            .foregroundStyle(filled ? Theme.white : tint)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Theme.navy.opacity(hovering ? 0.1 : 0.05))
+                    .fill(filled ? tint : tint.opacity(configuration.isPressed ? 0.16 : 0.08))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(Theme.navy.opacity(hovering ? 0.45 : 0.25), lineWidth: 1)
+                    .strokeBorder(filled ? tint.opacity(0.2) : tint.opacity(0.26), lineWidth: 1)
             )
-            .scaleEffect(configuration.isPressed ? 0.97 : 1)
-            .onHover { hovering = $0 }
-            .animation(.spring(response: 0.3, dampingFraction: 0.8),
-                       value: configuration.isPressed)
-            .animation(.spring(response: 0.3, dampingFraction: 0.8), value: hovering)
+            .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }

@@ -28,8 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recordingStartedAt: Date?
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
-    /// A fallback notice (formatter offline) to surface once the dictation
-    /// lands. Shown from render(.idle): showing it earlier is
+    /// A formatter-unavailable notice to surface once the dictation lands.
+    /// Shown from render(.idle): showing it earlier is
     /// useless because the delivering/idle transitions repaint the HUD within
     /// milliseconds and the message is never seen.
     private var pendingDeliveryNotice: String?
@@ -269,8 +269,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.languageMemory?.suggest(terms)
                 self?.viewModel?.refreshLanguageMemory()
             },
-            formatterFellBack: { [weak self] in
-                self?.pendingDeliveryNotice = "Inserted raw text (formatter offline)."
+            formatterUnavailable: { [weak self] in
+                self?.pendingDeliveryNotice = "Inserted Memory-cleaned text; formatter unavailable."
             },
             isSecureInputActive: { IsSecureEventInputEnabled() }
         )
@@ -608,24 +608,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// Active transcription provider for the focused local build. Legacy,
-    /// OpenAI fallback, and MAI/Speech paths are intentionally not added to the
-    /// live provider chain.
+    /// Active transcription provider for the focused local build.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        var chain: [TranscriptionProvider] = []
-
         if let endpoint = URL(string: settings.azureEndpoint),
            !settings.azureEndpoint.isEmpty,
            !settings.azureDeployment.isEmpty,
            let key = Keychain.get(account: "azure-openai-key") {
-            chain.append(AzureOpenAIProvider(config: .init(
+            return [AzureOpenAIProvider(config: .init(
                 endpoint: endpoint, apiKey: key,
                 deployment: settings.azureDeployment,
-                apiVersion: settings.azureAPIVersion)))
+                apiVersion: settings.azureAPIVersion))]
         }
 
-        return chain
+        return []
     }
 
     /// Builds the smart formatter from settings, or nil when formatting is off

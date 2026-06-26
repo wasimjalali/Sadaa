@@ -32,8 +32,7 @@ public final class DictationController {
     private let rawTransform: ((String, FormattingContext) async -> FormattingResult)?
     private let context: () -> FormattingContext
     private let suggestTerms: ([String]) -> Void
-    private let formatterFellBack: () -> Void
-    private let servedByFallback: (String) -> Void
+    private let formatterUnavailable: () -> Void
     private let now: () -> Date
     private let isSecureInputActive: () -> Bool
     private var pendingRawMode = false
@@ -64,8 +63,7 @@ public final class DictationController {
                                       speakerContext: "", language: .auto)
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
-                formatterFellBack: @escaping () -> Void = {},
-                servedByFallback: @escaping (String) -> Void = { _ in },
+                formatterUnavailable: @escaping () -> Void = {},
                 now: @escaping () -> Date = { Date() },
                 isSecureInputActive: @escaping () -> Bool = { false }) {
         self.recorder = recorder
@@ -79,8 +77,7 @@ public final class DictationController {
         self.rawTransform = rawTransform
         self.context = context
         self.suggestTerms = suggestTerms
-        self.formatterFellBack = formatterFellBack
-        self.servedByFallback = servedByFallback
+        self.formatterUnavailable = formatterUnavailable
         self.now = now
         self.isSecureInputActive = isSecureInputActive
         self.recorder.onAutoStop = { [weak self] in
@@ -213,14 +210,12 @@ public final class DictationController {
 
         var transcript: Transcript?
         var usedProvider: String?
-        var usedFromFallback = false
         var lastError: Error?
-        for (index, provider) in chain.enumerated() {
+        for provider in chain {
             do {
                 transcript = try await provider.transcribe(audio: audioURL,
                                                             hint: hint())
                 usedProvider = provider.name
-                usedFromFallback = index > 0
                 break
             } catch {
                 lastError = error
@@ -277,7 +272,7 @@ public final class DictationController {
                 snippetIDs = result.snippetIDs
                 if !result.newTerms.isEmpty { suggestTerms(result.newTerms) }
             } catch {
-                formatterFellBack()   // keep raw finalText; mode stays .raw
+                formatterUnavailable()   // keep raw finalText; mode stays .raw
                 if let rawTransform {
                     let result = await rawTransform(transcript.text, formattingContext)
                     finalText = result.text
@@ -310,8 +305,6 @@ public final class DictationController {
         deliver(finalText) { [weak self] in
             guard let self else { return }
             self.state = .idle
-            // Tell the user their primary was down and a fallback served them.
-            if usedFromFallback, let usedProvider { self.servedByFallback(usedProvider) }
         }
     }
 
