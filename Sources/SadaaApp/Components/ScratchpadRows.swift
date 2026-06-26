@@ -17,12 +17,12 @@ struct ScratchpadNoteRow: View {
                     }
                     Text(note.title)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isSelected ? Theme.navy : Theme.charcoal)
+                        .foregroundStyle(isSelected ? Theme.navy : Theme.ink)
                         .lineLimit(1)
                 }
                 Text(note.body.isEmpty ? "Empty note" : note.body)
                     .font(.system(size: 11))
-                    .foregroundStyle(Theme.charcoal.opacity(0.58))
+                    .foregroundStyle(Theme.muted)
                     .lineLimit(2)
                 HStack(spacing: 6) {
                     Text(PageFormat.relativeTime(note.updatedAt))
@@ -39,11 +39,11 @@ struct ScratchpadNoteRow: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Theme.gold.opacity(0.16) : Theme.creamSurface)
+                    .fill(isSelected ? Theme.gold.opacity(0.14) : Theme.white)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected ? Theme.gold.opacity(0.48) : Theme.gold.opacity(0.16),
+                    .strokeBorder(isSelected ? Theme.gold.opacity(0.55) : Theme.line,
                                   lineWidth: 1)
             )
         }
