@@ -82,7 +82,7 @@ struct HomePage: View {
 
     private var readinessStrip: some View {
         CommandPanel {
-            HStack(spacing: 10) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 190), spacing: 10)], spacing: 10) {
                 readinessBadge(
                     icon: viewModel.azureConfigured ? "checkmark.seal.fill" : "exclamationmark.triangle.fill",
                     title: viewModel.azureConfigured ? "Azure ready" : "Azure setup needed",
@@ -133,65 +133,83 @@ struct HomePage: View {
     }
 
     private var primaryWorkspace: some View {
-        HStack(alignment: .top, spacing: 18) {
-            CommandPanel("Voice", icon: "waveform") {
-                VStack(spacing: 16) {
-                    MicButton(state: viewModel.dictationState) { viewModel.toggle() }
-                        .padding(.top, 6)
-                    Text(stateText)
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundStyle(stateTint)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 360)
-                    if viewModel.canRetry {
-                        Button {
-                            viewModel.retry()
-                        } label: {
-                            Label("Retry retained audio", systemImage: "arrow.clockwise")
-                                .font(.system(size: 13, weight: .semibold))
-                        }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.navy)
-                    }
-                }
-                .frame(maxWidth: .infinity, minHeight: 290)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                voicePanel
+                    .frame(maxWidth: 450)
+                todayPanel
             }
-            .frame(maxWidth: 450)
-
-            CommandPanel("Today", icon: "calendar") {
-                VStack(spacing: 10) {
-                    HStack(spacing: 10) {
-                        CommandMetric(icon: "waveform", value: "\(todayCount)", label: todayCount == 1 ? "dictation" : "dictations", tint: Theme.navy)
-                        CommandMetric(icon: "clock", value: String(format: "%.1f", todayMinutes), label: "minutes", tint: Theme.gold)
-                    }
-                    HStack(spacing: 10) {
-                        CommandMetric(icon: "textformat", value: "\(todayWords)", label: "words", tint: Theme.sage)
-                        CommandMetric(icon: "sparkles", value: "\(todayMemoryEvents)", label: "memory events", tint: Theme.navy)
-                    }
-                    Divider()
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Model posture")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(Theme.navy)
-                        Text("Fast Azure transcription, local deterministic Memory, optional GPT cleanup.")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Theme.muted)
-                            .fixedSize(horizontal: false, vertical: true)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    Spacer(minLength: 0)
-                }
-                .frame(minHeight: 290)
+            VStack(alignment: .leading, spacing: 18) {
+                voicePanel
+                todayPanel
             }
         }
     }
 
     private var recentAndLearning: some View {
-        HStack(alignment: .top, spacing: 18) {
-            recentPanel
-                .frame(maxWidth: .infinity)
-            learningPulsePanel
-                .frame(width: 330)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                recentPanel
+                    .frame(maxWidth: .infinity)
+                learningPulsePanel
+                    .frame(width: 330)
+            }
+            VStack(alignment: .leading, spacing: 18) {
+                recentPanel
+                learningPulsePanel
+            }
+        }
+    }
+
+    private var voicePanel: some View {
+        CommandPanel("Voice", icon: "waveform") {
+            VStack(spacing: 16) {
+                MicButton(state: viewModel.dictationState) { viewModel.toggle() }
+                    .padding(.top, 6)
+                Text(stateText)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(stateTint)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 360)
+                if viewModel.canRetry {
+                    Button {
+                        viewModel.retry()
+                    } label: {
+                        Label("Retry retained audio", systemImage: "arrow.clockwise")
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.navy)
+                    .clickableCursor()
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 290)
+        }
+    }
+
+    private var todayPanel: some View {
+        CommandPanel("Today", icon: "calendar") {
+            VStack(spacing: 10) {
+                LazyVGrid(columns: [GridItem(.adaptive(minimum: 135), spacing: 10)], spacing: 10) {
+                    CommandMetric(icon: "waveform", value: "\(todayCount)", label: todayCount == 1 ? "dictation" : "dictations", tint: Theme.navy)
+                    CommandMetric(icon: "clock", value: String(format: "%.1f", todayMinutes), label: "minutes", tint: Theme.gold)
+                    CommandMetric(icon: "textformat", value: "\(todayWords)", label: "words", tint: Theme.sage)
+                    CommandMetric(icon: "sparkles", value: "\(todayMemoryEvents)", label: "memory events", tint: Theme.navy)
+                }
+                Divider()
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Model posture")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(Theme.navy)
+                    Text("Fast Azure transcription, local deterministic Memory, optional GPT cleanup.")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(Theme.muted)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                Spacer(minLength: 0)
+            }
+            .frame(minHeight: 290)
         }
     }
 
@@ -310,14 +328,15 @@ struct HomePage: View {
                 subtitle: "Teach Sadaa once so this wording is handled deterministically next time."
             )
             TextField("Heard", text: $correctionObserved)
-                .textFieldStyle(.roundedBorder)
+                .premiumInputChrome()
             TextField("Write", text: $correctionCorrected)
-                .textFieldStyle(.roundedBorder)
+                .premiumInputChrome()
             HStack {
                 Spacer()
                 Button("Cancel") {
                     correctionRecord = nil
                 }
+                .clickableCursor()
                 Button("Save to Memory") {
                     viewModel.languageMemory.learnCorrection(
                         observed: correctionObserved,
@@ -327,6 +346,7 @@ struct HomePage: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(correctionObserved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                           correctionCorrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -417,6 +437,7 @@ private struct RecentCommandRow: View {
                 .strokeBorder(Theme.navy.opacity(0.18), lineWidth: 1)
         )
         .help(title)
+        .clickableCursor()
     }
 }
 

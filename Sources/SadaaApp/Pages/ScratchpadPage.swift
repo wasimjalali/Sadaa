@@ -15,12 +15,15 @@ struct ScratchpadPage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            header
-            workspace
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                workspace
+            }
+            .padding(30)
+            .frame(maxWidth: 1120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(30)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.cream)
         .sheet(isPresented: $showImport) {
             importSheet
@@ -39,19 +42,31 @@ struct ScratchpadPage: View {
                 Label("New note", systemImage: "square.and.pencil")
                     .font(.system(size: 13, weight: .semibold))
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.navy)
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.navy)
+                .clickableCursor()
         }
     }
 
     private var workspace: some View {
-        HStack(alignment: .top, spacing: 16) {
-            noteRail
-                .frame(width: 300)
-            editor
-                .frame(minWidth: 460, maxWidth: .infinity)
-            utilityRail
-                .frame(width: 240)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                noteRail
+                    .frame(width: 300)
+                editor
+                    .frame(minWidth: 460, maxWidth: .infinity)
+                utilityRail
+                    .frame(width: 240)
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                noteRail
+                    .frame(maxWidth: .infinity)
+                editor
+                    .frame(maxWidth: .infinity)
+                utilityRail
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -116,7 +131,7 @@ struct ScratchpadPage: View {
                         get: { scratchpad.draftTags },
                         set: { scratchpad.updateDraftTags($0) }
                     ))
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                     .frame(maxWidth: 520)
 
                     noteStats
@@ -127,6 +142,7 @@ struct ScratchpadPage: View {
                     ))
                     .font(.system(size: 14))
                     .foregroundStyle(Theme.ink)
+                    .scrollContentBackground(.hidden)
                     .padding(10)
                     .background(Theme.white)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -134,7 +150,7 @@ struct ScratchpadPage: View {
                         RoundedRectangle(cornerRadius: 8)
                             .strokeBorder(Theme.line, lineWidth: 1)
                     )
-                    .frame(minHeight: 420, maxHeight: .infinity)
+                    .frame(minHeight: 360, idealHeight: 420)
 
                     if !scratchpad.saveError.isEmpty {
                         Text(scratchpad.saveError)
@@ -211,6 +227,7 @@ struct ScratchpadPage: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(tint.opacity(0.18), lineWidth: 1)
         )
+        .clickableCursor()
     }
 
     private var noteStats: some View {
@@ -238,6 +255,7 @@ struct ScratchpadPage: View {
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
                 .foregroundStyle(Theme.ink)
+                .scrollContentBackground(.hidden)
                 .padding(8)
                 .background(Theme.white)
                 .clipShape(RoundedRectangle(cornerRadius: 8))
@@ -258,11 +276,13 @@ struct ScratchpadPage: View {
                 Button("Cancel") {
                     showImport = false
                 }
+                .clickableCursor()
                 Button("Import") {
                     importScratchpad()
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }

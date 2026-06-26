@@ -84,7 +84,7 @@ struct SettingsPage: View {
 
     private var systemStrip: some View {
         LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+            columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
             spacing: 12
         ) {
             CommandMetric(
@@ -159,7 +159,7 @@ struct SettingsPage: View {
 
     private var azureControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
                 settingsField("Endpoint", "https://your-resource.services.ai.azure.com", $endpoint)
                 settingsField("API version", "2025-03-01-preview", $apiVersion)
                 settingsField("Active transcription deployment", "gpt-4o-mini-transcribe", $deployment)
@@ -206,6 +206,7 @@ struct SettingsPage: View {
             .accentColor(Theme.navy)
             .labelsHidden()
             .frame(maxWidth: 360)
+            .clickableCursor()
             .onChange(of: preset) { _, newValue in
                 switch newValue {
                 case .fast:
@@ -215,7 +216,7 @@ struct SettingsPage: View {
                 }
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
                 settingsField("Fast deployment", "gpt-4o-mini-transcribe", $fastDeployment)
                 settingsField("Accurate deployment", "gpt-4o-transcribe", $accurateDeployment)
             }
@@ -224,31 +225,17 @@ struct SettingsPage: View {
 
     private var formattingControls: some View {
         VStack(alignment: .leading, spacing: 14) {
-            HStack(alignment: .top, spacing: 14) {
-                SettingsToggleRow(
-                    title: "Smart formatting",
-                    detail: formattingEnabled ? "Enabled" : "Raw transcript mode",
-                    isOn: $formattingEnabled
-                )
-                .onChange(of: formattingEnabled) { _, isOn in
-                    settings.formattingEnabled = isOn
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 14) {
+                    smartFormattingToggle
+                    languageControl
+                        .frame(maxWidth: 340)
                 }
 
-                VStack(alignment: .leading, spacing: 8) {
-                    Text("Language")
-                        .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(Theme.muted)
-                    Picker("", selection: languageBinding) {
-                        ForEach(LanguagePin.allCases, id: \.self) { pin in
-                            Text(PageFormat.languageLabel(pin)).tag(pin)
-                        }
-                    }
-                    .pickerStyle(.segmented)
-                    .tint(Theme.navy)
-                    .accentColor(Theme.navy)
-                    .labelsHidden()
+                VStack(alignment: .leading, spacing: 14) {
+                    smartFormattingToggle
+                    languageControl
                 }
-                .frame(maxWidth: 340)
             }
 
             settingsField("GPT formatting deployment", "gpt-4o-mini", $gptDeployment)
@@ -270,7 +257,7 @@ struct SettingsPage: View {
 
     private var hotkeyControls: some View {
         VStack(alignment: .leading, spacing: 12) {
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
                 hotkeyPicker("Dictation", selection: hotkeyBinding)
                 hotkeyPicker("Voice edit", selection: voiceEditBinding)
                 hotkeyPicker("Language", selection: languageSwitchBinding)
@@ -286,16 +273,19 @@ struct SettingsPage: View {
 
     private var localControls: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                SettingsToggleRow(title: "Launch at login",
-                                  detail: launchAtLogin ? "Enabled" : "Manual launch",
-                                  isOn: $launchAtLogin)
-                SettingsToggleRow(title: "Sound effects",
-                                  detail: soundEffects ? "Chimes on" : "Silent",
-                                  isOn: $soundEffects)
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 14) {
+                    launchAtLoginToggle
+                    soundEffectsToggle
+                }
+
+                VStack(alignment: .leading, spacing: 14) {
+                    launchAtLoginToggle
+                    soundEffectsToggle
+                }
             }
 
-            LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+            LazyVGrid(columns: [GridItem(.adaptive(minimum: 210), spacing: 12)], spacing: 12) {
                 settingsField("Transcription rate ($/min)", "0.006", $transcriptionRate)
                 settingsField("Formatter rate ($/1k chars)", "0.002", $formatterRate)
             }
@@ -307,27 +297,88 @@ struct SettingsPage: View {
                 PremiumStatusBadge(icon: "exclamationmark.triangle.fill", text: launchError, tint: Theme.red)
             }
 
-            HStack(alignment: .center, spacing: 10) {
-                permissionChip("Microphone", granted: micGranted, pane: "Privacy_Microphone")
-                permissionChip("Accessibility", granted: axTrusted, pane: "Privacy_Accessibility")
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 10) {
+                    permissionChip("Microphone", granted: micGranted, pane: "Privacy_Microphone")
+                    permissionChip("Accessibility", granted: axTrusted, pane: "Privacy_Accessibility")
 
-                Spacer(minLength: 8)
+                    Spacer(minLength: 8)
 
-                Button {
-                    revealLocalData()
-                } label: {
-                    Label("Open Data Folder", systemImage: "folder")
+                    openDataFolderButton
+                    applyButton
                 }
-                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: false))
 
-                Button {
-                    save()
-                } label: {
-                    Label("Apply", systemImage: "checkmark")
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        permissionChip("Microphone", granted: micGranted, pane: "Privacy_Microphone")
+                        permissionChip("Accessibility", granted: axTrusted, pane: "Privacy_Accessibility")
+                    }
+                    HStack(spacing: 10) {
+                        openDataFolderButton
+                        applyButton
+                    }
                 }
-                .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: true))
             }
         }
+    }
+
+    private var smartFormattingToggle: some View {
+        SettingsToggleRow(
+            title: "Smart formatting",
+            detail: formattingEnabled ? "Enabled" : "Raw transcript mode",
+            isOn: $formattingEnabled
+        )
+        .onChange(of: formattingEnabled) { _, isOn in
+            settings.formattingEnabled = isOn
+        }
+    }
+
+    private var languageControl: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text("Language")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(Theme.muted)
+            Picker("", selection: languageBinding) {
+                ForEach(LanguagePin.allCases, id: \.self) { pin in
+                    Text(PageFormat.languageLabel(pin)).tag(pin)
+                }
+            }
+            .pickerStyle(.segmented)
+            .tint(Theme.navy)
+            .accentColor(Theme.navy)
+            .labelsHidden()
+            .clickableCursor()
+        }
+    }
+
+    private var launchAtLoginToggle: some View {
+        SettingsToggleRow(title: "Launch at login",
+                          detail: launchAtLogin ? "Enabled" : "Manual launch",
+                          isOn: $launchAtLogin)
+    }
+
+    private var soundEffectsToggle: some View {
+        SettingsToggleRow(title: "Sound effects",
+                          detail: soundEffects ? "Chimes on" : "Silent",
+                          isOn: $soundEffects)
+    }
+
+    private var openDataFolderButton: some View {
+        Button {
+            revealLocalData()
+        } label: {
+            Label("Open Data Folder", systemImage: "folder")
+        }
+        .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: false))
+    }
+
+    private var applyButton: some View {
+        Button {
+            save()
+        } label: {
+            Label("Apply", systemImage: "checkmark")
+        }
+        .buttonStyle(SettingsCommandButtonStyle(tint: Theme.navy, filled: true))
     }
 
     // MARK: - Controls
@@ -370,6 +421,7 @@ struct SettingsPage: View {
             .pickerStyle(.menu)
             .labelsHidden()
             .frame(maxWidth: .infinity, alignment: .leading)
+            .clickableCursor()
         }
         .padding(12)
         .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
@@ -619,26 +671,40 @@ private struct SettingsBand<Content: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 20) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .bold))
-                    .foregroundStyle(Theme.gold)
-                    .frame(width: 18)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text(title)
-                        .font(.system(size: 15, weight: .bold))
-                        .foregroundStyle(Theme.navy)
-                    Text(detail)
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.muted)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(width: 255, alignment: .leading)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 20) {
+                heading
+                    .frame(width: 255, alignment: .leading)
 
-            content
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+
+            VStack(alignment: .leading, spacing: 14) {
+                heading
                 .frame(maxWidth: .infinity, alignment: .leading)
+
+                content
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    private var heading: some View {
+        HStack(alignment: .top, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 14, weight: .bold))
+                .foregroundStyle(Theme.gold)
+                .frame(width: 18)
+            VStack(alignment: .leading, spacing: 4) {
+                Text(title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.navy)
+                Text(detail)
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(Theme.muted)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
     }
 }
@@ -663,6 +729,7 @@ private struct SettingsToggleRow: View {
                 .toggleStyle(.switch)
                 .labelsHidden()
                 .tint(Theme.navy)
+                .clickableCursor()
         }
         .padding(12)
         .frame(maxWidth: .infinity)
@@ -690,6 +757,7 @@ private struct SettingsCommandButtonStyle: ButtonStyle {
                     .strokeBorder(filled ? tint.opacity(0.2) : tint.opacity(0.26), lineWidth: 1)
             )
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .clickableCursor()
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }

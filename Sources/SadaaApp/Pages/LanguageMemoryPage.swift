@@ -28,12 +28,15 @@ struct LanguageMemoryPage: View {
     @State private var copiedExport = false
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            header
-            workbench
+        ScrollView {
+            VStack(alignment: .leading, spacing: 20) {
+                header
+                workbench
+            }
+            .padding(30)
+            .frame(maxWidth: 1120, alignment: .topLeading)
+            .frame(maxWidth: .infinity, alignment: .top)
         }
-        .padding(30)
-        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         .background(Theme.cream)
         .sheet(isPresented: $showImport) { importSheet }
     }
@@ -52,13 +55,24 @@ struct LanguageMemoryPage: View {
     }
 
     private var workbench: some View {
-        HStack(alignment: .top, spacing: 16) {
-            rail
-                .frame(width: 250)
-            listPanel
-                .frame(minWidth: 360, maxWidth: .infinity)
-            inspector
-                .frame(width: 330)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 16) {
+                rail
+                    .frame(width: 250)
+                listPanel
+                    .frame(minWidth: 360, maxWidth: .infinity)
+                inspector
+                    .frame(width: 330)
+            }
+
+            VStack(alignment: .leading, spacing: 16) {
+                rail
+                    .frame(maxWidth: .infinity)
+                inspector
+                    .frame(maxWidth: .infinity)
+                listPanel
+                    .frame(maxWidth: .infinity)
+            }
         }
     }
 
@@ -77,6 +91,7 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 VStack(spacing: 10) {
                     CommandMetric(icon: "textformat", value: "\(viewModel.terms.count)", label: "terms", tint: Theme.navy)
                     CommandMetric(icon: "arrow.left.arrow.right", value: "\(viewModel.replacements.count)", label: "corrections", tint: Theme.sage)
@@ -131,13 +146,13 @@ struct LanguageMemoryPage: View {
         CommandPanel("Add term", icon: "textformat") {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Phrase, name, acronym, product", text: $termPhrase)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 TextField("Pronunciations, comma separated", text: $termPronunciations)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 TextField("Aliases, comma separated", text: $termAliases)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 TextField("Notes", text: $termNotes)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 Picker("Priority", selection: $termPriority) {
                     ForEach(MemoryPriority.allCases, id: \.self) { priority in
                         Text(priorityTitle(priority)).tag(priority)
@@ -146,6 +161,7 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 Picker("Language", selection: $termLanguage) {
                     ForEach(MemoryLanguage.allCases, id: \.self) { language in
                         Text(languageTitle(language)).tag(language)
@@ -154,6 +170,7 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 Button {
                     viewModel.addTerm(
                         phrase: termPhrase,
@@ -174,6 +191,7 @@ struct LanguageMemoryPage: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(termPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -183,9 +201,9 @@ struct LanguageMemoryPage: View {
         CommandPanel("Add correction", icon: "arrow.left.arrow.right") {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("When Sadaa hears", text: $correctionHeard)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 TextField("Write this", text: $correctionWrite)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 Picker("Match", selection: $correctionMode) {
                     Text("Exact").tag(ReplacementMatchMode.exactPhrase)
                     Text("Case").tag(ReplacementMatchMode.caseInsensitivePhrase)
@@ -194,6 +212,7 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 Picker("Language", selection: $correctionLanguage) {
                     ForEach(MemoryLanguage.allCases, id: \.self) { language in
                         Text(languageTitle(language)).tag(language)
@@ -202,8 +221,9 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 TextField("Preview on sample text", text: $correctionPreviewText)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 if let correctionPreview {
                     previewBox(correctionPreview)
                 }
@@ -223,6 +243,7 @@ struct LanguageMemoryPage: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(correctionHeard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                           correctionWrite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -233,9 +254,9 @@ struct LanguageMemoryPage: View {
         CommandPanel("Add snippet", icon: "text.badge.plus") {
             VStack(alignment: .leading, spacing: 10) {
                 TextField("Trigger, e.g. my signature", text: $snippetTrigger)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 TextField("Tags, comma separated", text: $snippetTags)
-                    .textFieldStyle(.roundedBorder)
+                    .premiumInputChrome()
                 Picker("Language", selection: $snippetLanguage) {
                     ForEach(MemoryLanguage.allCases, id: \.self) { language in
                         Text(languageTitle(language)).tag(language)
@@ -244,8 +265,11 @@ struct LanguageMemoryPage: View {
                 .pickerStyle(.segmented)
                 .tint(Theme.navy)
                 .accentColor(Theme.navy)
+                .clickableCursor()
                 TextEditor(text: $snippetExpansion)
                     .font(.system(size: 12))
+                    .foregroundStyle(Theme.ink)
+                    .scrollContentBackground(.hidden)
                     .frame(minHeight: 120)
                     .padding(8)
                     .background(Theme.white)
@@ -267,6 +291,7 @@ struct LanguageMemoryPage: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(snippetTrigger.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
                           snippetExpansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
@@ -411,8 +436,11 @@ struct LanguageMemoryPage: View {
             .pickerStyle(.segmented)
             .tint(Theme.navy)
             .accentColor(Theme.navy)
+            .clickableCursor()
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
+                .foregroundStyle(Theme.ink)
+                .scrollContentBackground(.hidden)
                 .frame(minHeight: 220)
                 .padding(8)
                 .background(Theme.white)
@@ -426,6 +454,7 @@ struct LanguageMemoryPage: View {
             HStack {
                 Spacer()
                 Button("Cancel") { showImport = false }
+                    .clickableCursor()
                 Button("Import") {
                     guard let result = importMemory() else { return }
                     importError = "Imported \(result.inserted) items, updated \(result.updated)."
@@ -433,6 +462,7 @@ struct LanguageMemoryPage: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.navy)
+                .clickableCursor()
                 .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
@@ -451,6 +481,7 @@ struct LanguageMemoryPage: View {
         }
         .buttonStyle(PremiumIconButtonStyle())
         .help("Copy Memory export")
+        .clickableCursor()
     }
 
     private var importMenu: some View {
@@ -463,6 +494,7 @@ struct LanguageMemoryPage: View {
         }
         .buttonStyle(PremiumIconButtonStyle())
         .help("Import Memory")
+        .clickableCursor()
     }
 
     private func beginImport(_ kind: MemoryImportKind) {

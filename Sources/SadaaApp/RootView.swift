@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import SadaaCore
 
@@ -73,6 +74,7 @@ struct RootView: View {
                     )
                 }
                 .buttonStyle(.plain)
+                .clickableCursor()
                 .padding(.horizontal, 10)
             }
             Spacer(minLength: 0)
@@ -92,14 +94,7 @@ struct RootView: View {
 
     private var brand: some View {
         HStack(spacing: 10) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 8)
-                    .fill(Theme.gold)
-                    .frame(width: 34, height: 34)
-                Image(systemName: "waveform")
-                    .font(.system(size: 15, weight: .bold))
-                    .foregroundStyle(Theme.navy800)
-            }
+            BrandMark()
             VStack(alignment: .leading, spacing: 1) {
                 Text("Sadaa")
                     .font(.system(size: 20, weight: .bold))
@@ -155,4 +150,44 @@ struct RootView: View {
             SettingsPage(settings: settings, viewModel: viewModel)
         }
     }
+}
+
+private struct BrandMark: View {
+    var body: some View {
+        Group {
+            if let logo = Self.logoImage {
+                Image(nsImage: logo)
+                    .resizable()
+                    .scaledToFit()
+            } else {
+                Image(systemName: "waveform")
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(Theme.navy800)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .background(Theme.cream)
+            }
+        }
+        .frame(width: 34, height: 34)
+        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Theme.gold.opacity(0.22), lineWidth: 1)
+        )
+        .shadow(color: Theme.gold.opacity(0.14), radius: 8, y: 3)
+    }
+
+    private static let logoImage: NSImage? = {
+        if let url = Bundle.main.url(forResource: "SadaaLogo", withExtension: "png"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let url = Bundle.main.url(forResource: "Sadaa", withExtension: "icns"),
+           let image = NSImage(contentsOf: url) {
+            return image
+        }
+        if let appIcon = NSApplication.shared.applicationIconImage, appIcon.isValid {
+            return appIcon
+        }
+        return nil
+    }()
 }

@@ -96,7 +96,7 @@ struct HistoryPage: View {
 
     private var metricsStrip: some View {
         LazyVGrid(
-            columns: Array(repeating: GridItem(.flexible(), spacing: 12), count: 4),
+            columns: [GridItem(.adaptive(minimum: 150), spacing: 12)],
             spacing: 12
         ) {
             CommandMetric(icon: "waveform", value: "\(allRecords.count)", label: "saved transcripts", tint: Theme.navy)
@@ -108,40 +108,69 @@ struct HistoryPage: View {
 
     private var searchAndControls: some View {
         CommandPanel {
-            HStack(alignment: .center, spacing: 12) {
-                PremiumSearchField(placeholder: "Search transcripts, providers, languages, or AI terms", text: $query)
-                    .frame(maxWidth: 560)
-
-                PremiumStatusBadge(
-                    icon: "line.3.horizontal.decrease.circle",
-                    text: query.isEmpty ? "All transcripts" : "\(results.count) filtered",
-                    tint: Theme.sage
-                )
-
-                Spacer(minLength: 10)
-
-                Button {
-                    showClearConfirm = true
-                } label: {
-                    Label("Clear history", systemImage: "trash")
-                        .font(.system(size: 12, weight: .semibold))
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .center, spacing: 12) {
+                    historySearchField
+                        .frame(maxWidth: 560)
+                    historyFilterBadge
+                    Spacer(minLength: 10)
+                    clearHistoryButton
                 }
-                .buttonStyle(HistoryUtilityButtonStyle(tint: Theme.red))
-                .disabled(allRecords.isEmpty)
-                .opacity(allRecords.isEmpty ? 0.45 : 1)
+
+                VStack(alignment: .leading, spacing: 12) {
+                    historySearchField
+                    HStack(spacing: 10) {
+                        historyFilterBadge
+                        Spacer(minLength: 8)
+                        clearHistoryButton
+                    }
+                }
             }
         }
     }
 
     private var workspace: some View {
-        HStack(alignment: .top, spacing: 18) {
-            timelinePanel
-                .frame(minWidth: 540)
-                .layoutPriority(1)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                timelinePanel
+                    .frame(minWidth: 540)
+                    .layoutPriority(1)
 
-            inspectorPanel
-                .frame(width: 340)
+                inspectorPanel
+                    .frame(width: 340)
+            }
+
+            VStack(alignment: .leading, spacing: 18) {
+                timelinePanel
+                    .frame(maxWidth: .infinity)
+                inspectorPanel
+                    .frame(maxWidth: .infinity)
+            }
         }
+    }
+
+    private var historySearchField: some View {
+        PremiumSearchField(placeholder: "Search transcripts, providers, languages, or AI terms", text: $query)
+    }
+
+    private var historyFilterBadge: some View {
+        PremiumStatusBadge(
+            icon: "line.3.horizontal.decrease.circle",
+            text: query.isEmpty ? "All transcripts" : "\(results.count) filtered",
+            tint: Theme.sage
+        )
+    }
+
+    private var clearHistoryButton: some View {
+        Button {
+            showClearConfirm = true
+        } label: {
+            Label("Clear history", systemImage: "trash")
+                .font(.system(size: 12, weight: .semibold))
+        }
+        .buttonStyle(HistoryUtilityButtonStyle(tint: Theme.red))
+        .disabled(allRecords.isEmpty)
+        .opacity(allRecords.isEmpty ? 0.45 : 1)
     }
 
     private var timelinePanel: some View {
@@ -364,6 +393,7 @@ struct HistoryPage: View {
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(Theme.muted)
+                .clickableCursor()
 
                 Button {
                     viewModel.languageMemory.learnCorrection(
@@ -538,6 +568,7 @@ private struct HistoryTimelineRow: View {
             .shadow(color: Theme.navy.opacity(selected ? 0.08 : 0.03), radius: selected ? 16 : 8, y: 6)
             .contentShape(Rectangle())
             .onTapGesture(perform: onSelect)
+            .clickableCursor()
             .onHover { isOn in
                 withAnimation(.spring(response: 0.25, dampingFraction: 0.85)) {
                     hovering = isOn
@@ -560,6 +591,7 @@ private struct HistoryTimelineRow: View {
         .background(Theme.white, in: RoundedRectangle(cornerRadius: 7))
         .overlay(RoundedRectangle(cornerRadius: 7).strokeBorder(tint.opacity(0.24), lineWidth: 1))
         .help(help)
+        .clickableCursor()
     }
 }
 
@@ -588,6 +620,7 @@ private struct HistoryActionButton: View {
         .foregroundStyle(tint)
         .background(tint.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
         .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tint.opacity(0.24), lineWidth: 1))
+        .clickableCursor()
     }
 }
 
@@ -623,6 +656,7 @@ private struct HistoryUtilityButtonStyle: ButtonStyle {
             .background(tint.opacity(configuration.isPressed ? 0.18 : 0.09), in: RoundedRectangle(cornerRadius: 8))
             .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(tint.opacity(0.25), lineWidth: 1))
             .scaleEffect(configuration.isPressed ? 0.98 : 1)
+            .clickableCursor()
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
 }

@@ -1,4 +1,52 @@
+import AppKit
 import SwiftUI
+
+private struct ClickableCursorModifier: ViewModifier {
+    let enabled: Bool
+    @State private var cursorPushed = false
+
+    func body(content: Content) -> some View {
+        content
+            .onHover { inside in
+                guard enabled else {
+                    popIfNeeded()
+                    return
+                }
+                if inside, !cursorPushed {
+                    NSCursor.pointingHand.push()
+                    cursorPushed = true
+                } else if !inside {
+                    popIfNeeded()
+                }
+            }
+            .onDisappear {
+                popIfNeeded()
+            }
+    }
+
+    private func popIfNeeded() {
+        if cursorPushed {
+            NSCursor.pop()
+            cursorPushed = false
+        }
+    }
+}
+
+extension View {
+    func clickableCursor(_ enabled: Bool = true) -> some View {
+        modifier(ClickableCursorModifier(enabled: enabled))
+    }
+
+    func premiumInputChrome() -> some View {
+        textFieldStyle(.plain)
+            .font(.system(size: 13))
+            .foregroundStyle(Theme.ink)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 9)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+    }
+}
 
 struct PremiumStatusBadge: View {
     let icon: String?
@@ -54,6 +102,7 @@ private struct PremiumIconButtonBody: View {
             )
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .onHover { hovering = $0 }
+            .clickableCursor()
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: hovering)
             .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
     }
@@ -80,6 +129,7 @@ struct PremiumSearchField: View {
                         .foregroundStyle(Theme.charcoal.opacity(0.35))
                 }
                 .buttonStyle(.plain)
+                .clickableCursor()
             }
         }
         .padding(.horizontal, 11)
@@ -234,10 +284,12 @@ struct CommandMetric: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundStyle(Theme.ink)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.78)
                 Text(label)
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(Theme.muted)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 0)
         }
@@ -272,6 +324,7 @@ struct CommandToolbarButton: View {
                 .strokeBorder(tint.opacity(0.24), lineWidth: 1)
         )
         .help(title)
+        .clickableCursor()
     }
 }
 

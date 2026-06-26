@@ -48,6 +48,7 @@ struct ScratchpadNoteRow: View {
             )
         }
         .buttonStyle(.plain)
+        .clickableCursor()
     }
 
     private func wordCountText(_ count: Int) -> String {
