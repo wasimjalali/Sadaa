@@ -272,10 +272,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             formatterFellBack: { [weak self] in
                 self?.pendingDeliveryNotice = "Inserted raw text (formatter offline)."
             },
-            servedByFallback: { [weak self] name in
-                self?.hud.show(.error("Used \(name). Your primary provider was unavailable."))
-                self?.hud.hide(after: 4)
-            },
             isSecureInputActive: { IsSecureEventInputEnabled() }
         )
         controller.onStateChange = { [weak self] state in
@@ -612,8 +608,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
-    /// link is included only when configured. Spec section 3.5.
+    /// Active transcription provider for the focused local build. Legacy,
+    /// OpenAI fallback, and MAI/Speech paths are intentionally not added to the
+    /// live provider chain.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
         var chain: [TranscriptionProvider] = []
@@ -626,22 +623,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 endpoint: endpoint, apiKey: key,
                 deployment: settings.azureDeployment,
                 apiVersion: settings.azureAPIVersion)))
-        }
-
-        if settings.openaiEnabled,
-           let key = Keychain.get(account: "openai-key"), !key.isEmpty {
-            chain.append(OpenAIProvider(config: .init(
-                apiKey: key, model: settings.openaiModel)))
-        }
-
-        if settings.maiEnabled,
-           let endpoint = URL(string: settings.maiEndpoint),
-           !settings.maiEndpoint.isEmpty,
-           let key = Keychain.get(account: "azure-speech-key"), !key.isEmpty {
-            chain.append(AzureSpeechProvider(config: .init(
-                endpoint: endpoint, apiKey: key,
-                apiVersion: settings.maiApiVersion,
-                model: settings.maiModel)))
         }
 
         return chain

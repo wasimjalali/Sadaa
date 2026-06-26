@@ -21,6 +21,7 @@ import Foundation
         #expect(settings.azureEndpoint == "")
         #expect(settings.azureDeployment == "")
         #expect(settings.transcriptionPreset == .fast)
+        #expect(TranscriptionPreset.allCases == [.fast, .accurate])
         #expect(settings.fastTranscriptionDeployment == "gpt-4o-mini-transcribe")
         #expect(settings.accurateTranscriptionDeployment == "gpt-4o-transcribe")
         #expect(settings.hotkeyKeycode == 54)          // Right Command

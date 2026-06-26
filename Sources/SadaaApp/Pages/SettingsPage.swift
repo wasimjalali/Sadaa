@@ -20,14 +20,6 @@ struct SettingsPage: View {
     @State private var formattingEnabled = true
     @State private var gptDeployment = ""
     @State private var speakerContext = ""
-    @State private var openaiEnabled = false
-    @State private var openaiModel = ""
-    @State private var openaiKey = ""
-    @State private var maiEnabled = false
-    @State private var maiEndpoint = ""
-    @State private var maiKey = ""
-    @State private var maiModel = ""
-    @State private var maiApiVersion = ""
     @State private var transcriptionRate = ""
     @State private var formatterRate = ""
     @State private var launchAtLogin = false
@@ -56,7 +48,6 @@ struct SettingsPage: View {
                 formattingCard
                 providerPresetCard
                 azureCard
-                fallbackCard
                 costCard
                 generalCard
                 permissionsCard
@@ -214,22 +205,15 @@ struct SettingsPage: View {
                 switch newValue {
                 case .fast:
                     deployment = fastDeployment
-                    maiEnabled = false
                 case .accurate:
                     deployment = accurateDeployment
-                    maiEnabled = false
-                case .speechMAI:
-                    maiEnabled = true
-                case .legacy:
-                    deployment = "whisper"
-                    maiEnabled = false
                 }
             }
             HStack(spacing: 8) {
                 field("Fast deployment", "gpt-4o-mini-transcribe", $fastDeployment)
                 field("Accurate deployment", "gpt-4o-transcribe", $accurateDeployment)
             }
-            hint("Recommended: Fast uses your Azure deployment of gpt-4o-mini-transcribe or the newest mini transcribe variant available in your region; Accurate uses gpt-4o-transcribe when quality matters most. Realtime models are for streaming/live transcription, not this file-based hotkey flow. Use Azure Speech/MAI only where that resource is enabled.")
+            hint("Recommended: Fast uses your Azure deployment of gpt-4o-mini-transcribe or the newest mini transcribe variant available in your region; Accurate uses gpt-4o-transcribe when quality matters most. Realtime models are for future streaming/live transcription, not this file-based hotkey flow.")
         }
     }
 
@@ -258,25 +242,6 @@ struct SettingsPage: View {
                         .strokeBorder(Theme.charcoal.opacity(0.2), lineWidth: 1))
             }
             hint("Hold Shift when you stop to skip formatting for one dictation.")
-        }
-    }
-
-    private var fallbackCard: some View {
-        card("Fallback providers (optional)", icon: "arrow.triangle.branch") {
-            Toggle("Use OpenAI if Azure fails", isOn: $openaiEnabled)
-                .tint(Theme.navy)
-            field("OpenAI model", "whisper-1", $openaiModel)
-            field("OpenAI API key", "paste your key", $openaiKey, secure: true)
-            hint("OpenAI uses api.openai.com automatically, so there is no endpoint to set.")
-            Divider()
-            Toggle("Use Azure Speech (MAI)", isOn: $maiEnabled)
-                .tint(Theme.navy)
-            field("Azure Speech endpoint",
-                  "https://your-resource.cognitiveservices.azure.com", $maiEndpoint)
-            field("Azure Speech key", "paste your key", $maiKey, secure: true)
-            field("Azure Speech model", "mai-transcribe-1.5", $maiModel)
-            field("Azure Speech API version", "2025-10-15", $maiApiVersion)
-            hint("Azure Speech is a separate Azure resource from Azure OpenAI. Leave this off unless you have MAI-Transcribe enabled. Order tried: Azure OpenAI, then OpenAI, then Azure Speech.")
         }
     }
 
@@ -445,14 +410,6 @@ struct SettingsPage: View {
         formattingEnabled = settings.formattingEnabled
         gptDeployment = settings.gptDeployment
         speakerContext = settings.speakerContext
-        openaiEnabled = settings.openaiEnabled
-        openaiModel = settings.openaiModel
-        openaiKey = Keychain.get(account: "openai-key") ?? ""
-        maiEnabled = settings.maiEnabled
-        maiEndpoint = settings.maiEndpoint
-        maiKey = Keychain.get(account: "azure-speech-key") ?? ""
-        maiModel = settings.maiModel
-        maiApiVersion = settings.maiApiVersion
         transcriptionRate = String(settings.transcriptionRatePerMinute)
         formatterRate = String(settings.formatterRatePer1kChars)
         launchAtLogin = LoginItem.isEnabled
@@ -478,19 +435,6 @@ struct SettingsPage: View {
         settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.speakerContext = speakerContext
         settings.soundEffectsEnabled = soundEffects
-
-        settings.openaiEnabled = openaiEnabled
-        // Same guard as the Azure fields: never persist an empty model.
-        let trimmedOpenAIModel = openaiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedOpenAIModel.isEmpty { settings.openaiModel = trimmedOpenAIModel }
-        saveKey(openaiKey, account: "openai-key")
-        settings.maiEnabled = maiEnabled
-        settings.maiEndpoint = maiEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        saveKey(maiKey, account: "azure-speech-key")
-        let trimmedMaiModel = maiModel.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedMaiModel.isEmpty { settings.maiModel = trimmedMaiModel }
-        let trimmedMaiVersion = maiApiVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-        if !trimmedMaiVersion.isEmpty { settings.maiApiVersion = trimmedMaiVersion }
 
         // Validate rates instead of silently keeping the old value. Accept a
         // comma decimal too, so "0,006" works.
@@ -614,8 +558,6 @@ struct SettingsPage: View {
         switch preset {
         case .fast: return "Fast"
         case .accurate: return "Accurate"
-        case .speechMAI: return "Speech/MAI"
-        case .legacy: return "Legacy"
         }
     }
 }
