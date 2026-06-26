@@ -75,6 +75,8 @@ struct LanguageMemoryPage: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 VStack(spacing: 10) {
                     CommandMetric(icon: "textformat", value: "\(viewModel.terms.count)", label: "terms", tint: Theme.navy)
                     CommandMetric(icon: "arrow.left.arrow.right", value: "\(viewModel.replacements.count)", label: "corrections", tint: Theme.sage)
@@ -142,12 +144,16 @@ struct LanguageMemoryPage: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 Picker("Language", selection: $termLanguage) {
                     ForEach(MemoryLanguage.allCases, id: \.self) { language in
                         Text(languageTitle(language)).tag(language)
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 Button {
                     viewModel.addTerm(
                         phrase: termPhrase,
@@ -186,12 +192,16 @@ struct LanguageMemoryPage: View {
                     Text("Boundary").tag(ReplacementMatchMode.wordBoundaryPhrase)
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 Picker("Language", selection: $correctionLanguage) {
                     ForEach(MemoryLanguage.allCases, id: \.self) { language in
                         Text(languageTitle(language)).tag(language)
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 TextField("Preview on sample text", text: $correctionPreviewText)
                     .textFieldStyle(.roundedBorder)
                 if let correctionPreview {
@@ -232,6 +242,8 @@ struct LanguageMemoryPage: View {
                     }
                 }
                 .pickerStyle(.segmented)
+                .tint(Theme.navy)
+                .accentColor(Theme.navy)
                 TextEditor(text: $snippetExpansion)
                     .font(.system(size: 12))
                     .frame(minHeight: 120)
@@ -397,6 +409,8 @@ struct LanguageMemoryPage: View {
                 }
             }
             .pickerStyle(.segmented)
+            .tint(Theme.navy)
+            .accentColor(Theme.navy)
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
                 .frame(minHeight: 220)

@@ -202,6 +202,8 @@ struct SettingsPage: View {
                 }
             }
             .pickerStyle(.segmented)
+            .tint(Theme.navy)
+            .accentColor(Theme.navy)
             .labelsHidden()
             .frame(maxWidth: 360)
             .onChange(of: preset) { _, newValue in
@@ -242,6 +244,8 @@ struct SettingsPage: View {
                         }
                     }
                     .pickerStyle(.segmented)
+                    .tint(Theme.navy)
+                    .accentColor(Theme.navy)
                     .labelsHidden()
                 }
                 .frame(maxWidth: 340)
