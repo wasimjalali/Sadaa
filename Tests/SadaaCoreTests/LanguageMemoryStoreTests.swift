@@ -97,6 +97,31 @@ import Foundation
         #expect(reopened.snippets().first?.isEnabled == false)
     }
 
+    @Test func testLearningCorrectionCreatesRuleOrHighPriorityTerm() {
+        let replacement = LanguageMemoryLearningPolicy.makeEntry(
+            observed: "cloud code",
+            corrected: "Claude Code"
+        )
+        if case .replacement(let rule) = replacement {
+            #expect(rule.match == "cloud code")
+            #expect(rule.replacement == "Claude Code")
+            #expect(rule.matchMode == .wordBoundaryPhrase)
+        } else {
+            Issue.record("Expected a deterministic replacement")
+        }
+
+        let term = LanguageMemoryLearningPolicy.makeEntry(
+            observed: "Codex",
+            corrected: "Codex"
+        )
+        if case .term(let memoryTerm) = term {
+            #expect(memoryTerm.phrase == "Codex")
+            #expect(memoryTerm.priority == .high)
+        } else {
+            Issue.record("Expected a high-priority memory term")
+        }
+    }
+
     @Test func testCorruptFileRecoversWithBackup() throws {
         let url = tempFile()
         defer {

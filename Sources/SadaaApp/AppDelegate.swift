@@ -28,8 +28,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recordingStartedAt: Date?
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
-    /// A fallback notice (formatter offline) to surface once the dictation
-    /// lands. Shown from render(.idle): showing it earlier is
+    /// A formatter-unavailable notice to surface once the dictation lands.
+    /// Shown from render(.idle): showing it earlier is
     /// useless because the delivering/idle transitions repaint the HUD within
     /// milliseconds and the message is never seen.
     private var pendingDeliveryNotice: String?
@@ -222,7 +222,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self.viewModel?.refreshRecent()
                 self.viewModel?.refreshCost()
             },
-            format: { [settings, languageMemory] raw, ctx in
+            format: { [weak self, settings, languageMemory] raw, ctx in
                 let memory = languageMemory.snapshot()
                 let memoryLanguage = MemoryLanguage(languagePin: ctx.language)
                 let prepared = LanguageMemoryPostProcessor.applyDeterministic(
@@ -237,12 +237,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let formatter = Self.buildFormatter(settings: settings) else {
                     return LanguageMemoryPostProcessor.rawResult(from: prepared)
                 }
-                let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
-                return LanguageMemoryPostProcessor.formattedResult(
-                    prepared: prepared,
-                    formatted: formatted,
-                    snapshot: memory,
-                    language: memoryLanguage)
+                do {
+                    let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
+                    return LanguageMemoryPostProcessor.formattedResult(
+                        prepared: prepared,
+                        formatted: formatted,
+                        snapshot: memory,
+                        language: memoryLanguage)
+                } catch {
+                    self?.pendingDeliveryNotice = "Formatter unavailable: \(Self.describeFormatterError(error))"
+                    throw error
+                }
             },
             rawTransform: { [languageMemory] raw, ctx in
                 LanguageMemoryPostProcessor.rawResult(
@@ -269,12 +274,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 self?.languageMemory?.suggest(terms)
                 self?.viewModel?.refreshLanguageMemory()
             },
-            formatterFellBack: { [weak self] in
-                self?.pendingDeliveryNotice = "Inserted raw text (formatter offline)."
-            },
-            servedByFallback: { [weak self] name in
-                self?.hud.show(.error("Used \(name). Your primary provider was unavailable."))
-                self?.hud.hide(after: 4)
+            formatterUnavailable: { [weak self] in
+                guard let self else { return }
+                if self.pendingDeliveryNotice == nil {
+                    self.pendingDeliveryNotice = "Inserted Memory-cleaned text; formatter unavailable."
+                }
             },
             isSecureInputActive: { IsSecureEventInputEnabled() }
         )
@@ -612,39 +616,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    /// The fallback chain, in order: Azure OpenAI, then OpenAI, then MAI. Each
-    /// link is included only when configured. Spec section 3.5.
+    /// Active transcription provider for the focused local build.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        var chain: [TranscriptionProvider] = []
-
         if let endpoint = URL(string: settings.azureEndpoint),
            !settings.azureEndpoint.isEmpty,
            !settings.azureDeployment.isEmpty,
            let key = Keychain.get(account: "azure-openai-key") {
-            chain.append(AzureOpenAIProvider(config: .init(
+            return [AzureOpenAIProvider(config: .init(
                 endpoint: endpoint, apiKey: key,
                 deployment: settings.azureDeployment,
-                apiVersion: settings.azureAPIVersion)))
+                apiVersion: settings.azureAPIVersion))]
         }
 
-        if settings.openaiEnabled,
-           let key = Keychain.get(account: "openai-key"), !key.isEmpty {
-            chain.append(OpenAIProvider(config: .init(
-                apiKey: key, model: settings.openaiModel)))
-        }
-
-        if settings.maiEnabled,
-           let endpoint = URL(string: settings.maiEndpoint),
-           !settings.maiEndpoint.isEmpty,
-           let key = Keychain.get(account: "azure-speech-key"), !key.isEmpty {
-            chain.append(AzureSpeechProvider(config: .init(
-                endpoint: endpoint, apiKey: key,
-                apiVersion: settings.maiApiVersion,
-                model: settings.maiModel)))
-        }
-
-        return chain
+        return []
     }
 
     /// Builds the smart formatter from settings, or nil when formatting is off
@@ -678,6 +663,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .transport(let urlError):
             return urlError.localizedDescription
         }
+    }
+
+    private static func describeFormatterError(_ error: Error) -> String {
+        String(FormatterHealthCheck.describe(error).prefix(160))
     }
 
     private func startHotkeys() {

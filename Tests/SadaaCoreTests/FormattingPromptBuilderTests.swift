@@ -131,4 +131,14 @@ import Testing
         #expect(prompt.contains("Markdown list"))
         #expect(prompt.contains("Do NOT turn ordinary sentences"))
     }
+
+    @Test func testOutputContractIsStrictAndNeverEmpty() {
+        let prompt = FormattingPromptBuilder.systemPrompt(
+            profile: FormattingProfiles.default,
+            dictionaryWords: [],
+            speakerContext: "ctx")
+        #expect(prompt.contains("The text field must never be empty"))
+        #expect(prompt.contains("No markdown fences"))
+        #expect(prompt.contains("newTerms is only for proper nouns"))
+    }
 }

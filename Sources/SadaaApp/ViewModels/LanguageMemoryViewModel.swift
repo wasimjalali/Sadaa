@@ -145,11 +145,16 @@ final class LanguageMemoryViewModel: ObservableObject {
         let observedTrimmed = observed.trimmingCharacters(in: .whitespacesAndNewlines)
         let correctedTrimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !observedTrimmed.isEmpty, !correctedTrimmed.isEmpty else { return }
-        if observedTrimmed.caseInsensitiveCompare(correctedTrimmed) == .orderedSame {
-            addTerm(phrase: correctedTrimmed)
-        } else {
-            addReplacement(match: observedTrimmed, replacement: correctedTrimmed)
+        switch LanguageMemoryLearningPolicy.makeEntry(
+            observed: observedTrimmed,
+            corrected: correctedTrimmed
+        ) {
+        case .term(let term):
+            _ = store.upsertTerm(term)
+        case .replacement(let replacement):
+            _ = store.upsertReplacement(replacement)
         }
+        refresh()
     }
 
     func recordUsage(termIDs: [UUID], replacementRuleIDs: [UUID], snippetIDs: [UUID] = []) {

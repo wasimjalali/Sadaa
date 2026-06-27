@@ -34,8 +34,8 @@ struct MicButton: View {
         )
         .onHover { inside in
             hovering = inside
-            if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
         }
+        .clickableCursor()
         .accessibilityLabel("Dictation control")
     }
 

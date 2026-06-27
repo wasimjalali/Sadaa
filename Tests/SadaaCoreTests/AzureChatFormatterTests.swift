@@ -32,6 +32,30 @@ import Foundation
         #expect(messages.last?["content"] == "<transcript>\nhello\n</transcript>")
     }
 
+    @Test func testResponsesRequestUsesProjectEndpointAndSchema() throws {
+        let projectConfig = AzureChatFormatter.Config(
+            endpoint: URL(string: "https://myres.services.ai.azure.com/api/projects/sadaa")!,
+            apiKey: "test-key",
+            deployment: "gpt-5.5-nano",
+            apiVersion: "2025-03-01-preview")
+        let formatter = AzureChatFormatter(config: projectConfig)
+        let request = try formatter.makeResponsesRequest(
+            rawTranscript: "hello",
+            context: context(bundle: "com.microsoft.VSCode"))
+
+        #expect(request.url?.absoluteString ==
+            "https://myres.services.ai.azure.com/api/projects/sadaa/openai/v1/responses")
+        #expect(request.value(forHTTPHeaderField: "api-key") == "test-key")
+
+        let json = try JSONSerialization.jsonObject(with: request.httpBody!) as! [String: Any]
+        #expect(json["model"] as? String == "gpt-5.5-nano")
+        #expect((json["instructions"] as? String)?.contains("transcription cleaner") == true)
+        #expect(json["input"] as? String == "<transcript>\nhello\n</transcript>")
+        let text = json["text"] as! [String: Any]
+        let format = text["format"] as! [String: Any]
+        #expect(format["type"] as? String == "json_schema")
+    }
+
     @Test func testParseStructuredJSON() throws {
         let body = #"{"choices":[{"message":{"content":"{\"text\":\"Hello, world.\",\"newTerms\":[\"Karko\"]}"}}]}"#
         let result = try AzureChatFormatter.parse(Data(body.utf8), fallbackRaw: "raw")
@@ -50,6 +74,19 @@ import Foundation
         let body = #"{"choices":[{"message":{"content":"{\"text\":\"x\",\"newTerms\":[\"a\",\"b\",\"c\",\"d\"]}"}}]}"#
         let result = try AzureChatFormatter.parse(Data(body.utf8), fallbackRaw: "raw")
         #expect(result.newTerms == ["a", "b", "c"])
+    }
+
+    @Test func testParseResponsesOutputText() throws {
+        let body = #"{"output_text":"{\"text\":\"Hello from responses.\",\"newTerms\":[]}"}"#
+        let result = try AzureChatFormatter.parse(Data(body.utf8), fallbackRaw: "raw")
+        #expect(result.text == "Hello from responses.")
+    }
+
+    @Test func testParseResponsesMessageContent() throws {
+        let body = #"{"output":[{"type":"message","content":[{"type":"output_text","text":"{\"text\":\"Nested response.\",\"newTerms\":[\"Codex\"]}"}]}]}"#
+        let result = try AzureChatFormatter.parse(Data(body.utf8), fallbackRaw: "raw")
+        #expect(result.text == "Nested response.")
+        #expect(result.newTerms == ["Codex"])
     }
 
     @Test func testFormatSuccessViaStub() async throws {
@@ -80,6 +117,71 @@ import Foundation
             Issue.record("expected ProviderError")
         } catch let ProviderError.http(status, _) {
             #expect(status == 401)
+        }
+    }
+
+    @Test func testFormatFallsBackToResponsesForProjectEndpoint() async throws {
+        let projectConfig = AzureChatFormatter.Config(
+            endpoint: URL(string: "https://myres.services.ai.azure.com/api/projects/sadaa")!,
+            apiKey: "test-key",
+            deployment: "gpt-5.5-nano",
+            apiVersion: "2025-03-01-preview")
+        var urls: [String] = []
+        ChatStubURLProtocol.handler = { request in
+            urls.append(request.url!.absoluteString)
+            if urls.count == 1 {
+                let response = HTTPURLResponse(url: request.url!, statusCode: 404,
+                                               httpVersion: nil, headerFields: nil)!
+                let body = #"{"error":{"code":"DeploymentNotFound","message":"missing legacy route"}}"#
+                return (response, Data(body.utf8))
+            }
+
+            let response = HTTPURLResponse(url: request.url!, statusCode: 200,
+                                           httpVersion: nil, headerFields: nil)!
+            let body = #"{"output_text":"{\"text\":\"Responses route worked.\",\"newTerms\":[]}"}"#
+            return (response, Data(body.utf8))
+        }
+
+        let formatter = AzureChatFormatter(config: projectConfig,
+                                           session: ChatStubURLProtocol.session())
+        let result = try await formatter.format(rawTranscript: "responses route worked",
+                                                context: context())
+
+        #expect(result.text == "Responses route worked.")
+        #expect(urls == [
+            "https://myres.services.ai.azure.com/openai/deployments/gpt-5.5-nano/chat/completions?api-version=2025-03-01-preview",
+            "https://myres.services.ai.azure.com/api/projects/sadaa/openai/v1/responses",
+        ])
+    }
+
+    @Test func testFormatterErrorCombinesLegacyAndResponsesFailures() async throws {
+        let projectConfig = AzureChatFormatter.Config(
+            endpoint: URL(string: "https://myres.services.ai.azure.com/api/projects/sadaa")!,
+            apiKey: "test-key",
+            deployment: "missing",
+            apiVersion: "2025-03-01-preview")
+        ChatStubURLProtocol.handler = { request in
+            let response = HTTPURLResponse(url: request.url!, statusCode: 404,
+                                           httpVersion: nil, headerFields: nil)!
+            let body: String
+            if request.url!.absoluteString.contains("/responses") {
+                body = #"{"error":{"code":"DeploymentNotFound","message":"responses missing"}}"#
+            } else {
+                body = #"{"error":{"code":"DeploymentNotFound","message":"legacy missing"}}"#
+            }
+            return (response, Data(body.utf8))
+        }
+
+        let formatter = AzureChatFormatter(config: projectConfig,
+                                           session: ChatStubURLProtocol.session())
+        do {
+            _ = try await formatter.format(rawTranscript: "x", context: context())
+            Issue.record("expected ProviderError")
+        } catch let ProviderError.http(status, body) {
+            #expect(status == 404)
+            #expect(body.contains("Chat Completions failed"))
+            #expect(body.contains("Responses API failed"))
+            #expect(body.contains("DeploymentNotFound"))
         }
     }
 }

@@ -46,8 +46,6 @@ Use Azure OpenAI / Foundry deployments when available:
 
 - **Fast daily dictation**: your Azure deployment of `gpt-4o-mini-transcribe`, or the newest mini transcribe variant available in your region
 - **Best accuracy**: your Azure deployment of `gpt-4o-transcribe`
-- **Legacy fallback**: `whisper` / `whisper-1` only if your Azure resource does not yet expose the newer transcribe models
-- **Azure Speech / MAI**: `mai-transcribe-1.5` where you have that Speech resource enabled
 - **Realtime models**: useful for future streaming/live transcription work, but not the current Sadaa hotkey flow, which records an utterance and submits it through the file-based audio transcription path
 
 Smart formatting should use a chat deployment such as `gpt-4o-mini` for low-latency cleanup. API keys remain in Keychain. Local app data stays under Sadaa's Application Support directory; Sadaa does not read, scan, index, or default-save into your Documents folder.

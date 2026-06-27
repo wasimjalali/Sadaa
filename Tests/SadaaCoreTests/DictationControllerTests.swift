@@ -99,7 +99,7 @@ struct FakeProvider: TranscriptionProvider {
             context: { FormattingContext(appBundleID: nil, dictionaryWords: [],
                                          speakerContext: "", language: .auto) },
             suggestTerms: { [weak self] terms in self?.suggested.append(contentsOf: terms) },
-            formatterFellBack: { [weak self] in self?.fellBack = true })
+            formatterUnavailable: { [weak self] in self?.fellBack = true })
         controller.onStateChange = { [weak self] state in self?.states.append(state) }
         return controller
     }
@@ -267,7 +267,7 @@ struct FakeProvider: TranscriptionProvider {
         #expect(records.first?.durationSeconds == 3)
     }
 
-    @Test func testFallbackChain() async throws {
+    @Test func testSecondaryProviderCanRecoverIfFirstFails() async throws {
         let failing = FakeProvider(name: "primary",
                                    result: .failure(ProviderError.http(500, "boom")))
         let working = FakeProvider(
@@ -281,50 +281,6 @@ struct FakeProvider: TranscriptionProvider {
         await controller.toggleAndWait()
         #expect(delivered == ["rescued"])
         #expect(controller.state == .idle)
-    }
-
-    @Test func testServedByFallbackFiresWhenSecondaryUsed() async throws {
-        // Spec section 5: non-primary provider use is surfaced.
-        let failing = FakeProvider(name: "primary",
-                                   result: .failure(ProviderError.http(500, "x")))
-        let working = FakeProvider(
-            name: "secondary",
-            result: .success(Transcript(text: "ok", detectedLanguage: nil,
-                                        durationSeconds: nil)))
-        var fallbackNoted: String?
-        let controller = DictationController(
-            recorder: recorder,
-            providers: { [failing, working] },
-            store: store,
-            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
-            recordingsToKeep: 10,
-            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
-            record: { [weak self] record in self?.records.append(record) },
-            servedByFallback: { name in fallbackNoted = name })
-        controller.toggle()
-        await controller.toggleAndWait()
-        #expect(delivered == ["ok"])
-        #expect(fallbackNoted == "secondary")
-    }
-
-    @Test func testServedByFallbackSilentWhenPrimaryWorks() async throws {
-        let working = FakeProvider(
-            name: "primary",
-            result: .success(Transcript(text: "ok", detectedLanguage: nil,
-                                        durationSeconds: nil)))
-        var fallbackNoted: String?
-        let controller = DictationController(
-            recorder: recorder,
-            providers: { [working] },
-            store: store,
-            hint: { TranscriptionHint(languagePin: .auto, dictionaryWords: []) },
-            recordingsToKeep: 10,
-            deliver: { [weak self] text, done in self?.delivered.append(text); done() },
-            record: { [weak self] record in self?.records.append(record) },
-            servedByFallback: { name in fallbackNoted = name })
-        controller.toggle()
-        await controller.toggleAndWait()
-        #expect(fallbackNoted == nil)
     }
 
     @Test func testRetryLastRecoversAfterAllProvidersFail() async throws {
