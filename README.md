@@ -2,6 +2,10 @@
 
 **Type with your voice, anywhere on your Mac.**
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+[![Swift](https://img.shields.io/badge/Swift-F05138?logo=swift&logoColor=white)](https://swift.org)
+![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
+
 A fast, personal voice-dictation app for macOS. Tap a hotkey anywhere, speak in English or German, and the transcript lands at your cursor. Built to use your Azure OpenAI whisper deployment (the thing OpenWhispr and friends can't do).
 
 This is now the premium local-first Sadaa build: record, transcribe through Azure-hosted models, clean the text, apply personal Language Memory, and insert at your cursor with a clipboard backup. The main window is a control center for readiness, Language Memory, Scratchpad notes, history, provider setup, and diagnostics.
