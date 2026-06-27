@@ -67,3 +67,7 @@ Tests run under Command Line Tools; the Makefile injects the framework paths Swi
 - `Sources/SadaaApp` - macOS glue: AppDelegate, menu bar, HUD, hotkey tap, text insertion, premium pages, and settings window.
 - `docs/superpowers/specs` - the design spec. `docs/superpowers/plans` - the implementation plan.
 - `assets/branding` - the app icon (navy-on-cream 3D sound wave, Karko palette).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
