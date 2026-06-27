@@ -302,10 +302,11 @@ struct HomePage: View {
     }
 
     private var todayMemoryEvents: Int {
-        todayRecords.reduce(0) { sum, record in
-            sum + (record.memoryHitIDs?.count ?? 0)
-                + (record.replacementRuleIDs?.count ?? 0)
-                + (record.snippetIDs?.count ?? 0)
+        todayRecords.reduce(into: 0) { sum, record in
+            let hits = record.memoryHitIDs?.count ?? 0
+            let rules = record.replacementRuleIDs?.count ?? 0
+            let snippets = record.snippetIDs?.count ?? 0
+            sum += hits + rules + snippets
         }
     }
 

@@ -32,11 +32,11 @@ struct HistoryPage: View {
     }
 
     private var memoryTouchCount: Int {
-        allRecords.reduce(0) { total, record in
-            total
-            + (record.memoryHitIDs?.count ?? 0)
-            + (record.replacementRuleIDs?.count ?? 0)
-            + (record.snippetIDs?.count ?? 0)
+        allRecords.reduce(into: 0) { total, record in
+            let hits = record.memoryHitIDs?.count ?? 0
+            let rules = record.replacementRuleIDs?.count ?? 0
+            let snippets = record.snippetIDs?.count ?? 0
+            total += hits + rules + snippets
         }
     }
 
