@@ -38,6 +38,13 @@ public final class ScratchpadStore {
     }
 
     @discardableResult
+    public func captureDictation(_ text: String, createdAt: Date = Date()) -> ScratchpadNote? {
+        let body = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !body.isEmpty else { return nil }
+        return add(title: "Dictation", body: body, tags: [], createdAt: createdAt)
+    }
+
+    @discardableResult
     public func add(title: String, body: String, tags: [String], createdAt: Date) -> ScratchpadNote? {
         let normalized = normalize(title: title, body: body, tags: tags)
         guard !normalized.title.isEmpty || !normalized.body.isEmpty else { return nil }

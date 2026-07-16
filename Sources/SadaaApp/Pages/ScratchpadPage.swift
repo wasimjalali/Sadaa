@@ -16,15 +16,13 @@ struct ScratchpadPage: View {
     }
 
     var body: some View {
-        GeometryReader { _ in
-            VStack(alignment: .leading, spacing: 22) {
-                header
-                workspace
-            }
-            .padding(32)
-            .frame(maxWidth: 1180, maxHeight: .infinity, alignment: .topLeading)
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        FillRemainingHeightLayout(spacing: 22) {
+            header
+            workspace
         }
+        .padding(32)
+        .frame(maxWidth: 1180, maxHeight: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         .background(Theme.surface)
         .sheet(isPresented: $showImport) { importSheet }
         .onDisappear { scratchpad.commitDraft() }
@@ -93,63 +91,62 @@ struct ScratchpadPage: View {
     private var editor: some View {
         Group {
             if let selected = scratchpad.selected {
-                GeometryReader { geometry in
-                    VStack(alignment: .leading, spacing: 14) {
-                        editorToolbar(selected)
+                VStack(alignment: .leading, spacing: 14) {
+                    editorToolbar(selected)
 
+                    TextField(
+                        "Note title",
+                        text: Binding(
+                            get: { scratchpad.draftTitle },
+                            set: { scratchpad.updateDraftTitle($0) }
+                        )
+                    )
+                    .textFieldStyle(.plain)
+                    .font(.system(size: 24, weight: .bold))
+                    .foregroundStyle(Theme.ink)
+
+                    TextEditor(
+                        text: Binding(
+                            get: { scratchpad.draftBody },
+                            set: { scratchpad.updateDraftBody($0) }
+                        )
+                    )
+                    .font(.system(size: 15))
+                    .foregroundStyle(Theme.ink)
+                    .scrollContentBackground(.hidden)
+                    .padding(2)
+                    .frame(minHeight: 120, maxHeight: .infinity)
+                    .layoutPriority(1)
+
+                    Divider().overlay(Theme.line)
+
+                    HStack(spacing: 12) {
                         TextField(
-                            "Note title",
+                            "Tags, comma separated",
                             text: Binding(
-                                get: { scratchpad.draftTitle },
-                                set: { scratchpad.updateDraftTitle($0) }
+                                get: { scratchpad.draftTags },
+                                set: { scratchpad.updateDraftTags($0) }
                             )
                         )
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 24, weight: .bold))
-                        .foregroundStyle(Theme.ink)
+                        .premiumInputChrome()
 
-                        TextEditor(
-                            text: Binding(
-                                get: { scratchpad.draftBody },
-                                set: { scratchpad.updateDraftBody($0) }
-                            )
-                        )
-                        .font(.system(size: 15))
-                        .foregroundStyle(Theme.ink)
-                        .scrollContentBackground(.hidden)
-                        .padding(2)
-                        .frame(height: max(180, geometry.size.height - 190))
-
-                        Divider().overlay(Theme.line)
-
-                        HStack(spacing: 12) {
-                            TextField(
-                                "Tags, comma separated",
-                                text: Binding(
-                                    get: { scratchpad.draftTags },
-                                    set: { scratchpad.updateDraftTags($0) }
-                                )
-                            )
-                            .premiumInputChrome()
-
-                            Text("\(ScratchpadNote.wordCount(in: scratchpad.draftBody)) words")
-                                .font(.system(size: 11).monospacedDigit())
-                                .foregroundStyle(Theme.muted)
-                            Text("Saved automatically")
-                                .font(.system(size: 11))
-                                .foregroundStyle(Theme.success)
-                        }
-                        .fixedSize(horizontal: false, vertical: true)
-
-                        if !scratchpad.saveError.isEmpty {
-                            Text(scratchpad.saveError)
-                                .font(.system(size: 12))
-                                .foregroundStyle(Theme.danger)
-                        }
+                        Text("\(ScratchpadNote.wordCount(in: scratchpad.draftBody)) words")
+                            .font(.system(size: 11).monospacedDigit())
+                            .foregroundStyle(Theme.muted)
+                        Text("Saved automatically")
+                            .font(.system(size: 11))
+                            .foregroundStyle(Theme.success)
                     }
-                    .padding(24)
-                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                    if !scratchpad.saveError.isEmpty {
+                        Text(scratchpad.saveError)
+                            .font(.system(size: 12))
+                            .foregroundStyle(Theme.danger)
+                    }
                 }
+                .padding(24)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
             } else {
                 CommandEmptyState(
                     icon: "note.text",

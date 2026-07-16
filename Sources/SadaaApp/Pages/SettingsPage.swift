@@ -55,7 +55,7 @@ struct SettingsPage: View {
             title: "Settings",
             subtitle: "Choose how Sadaa listens, writes and stores your local data."
         ) {
-            HStack(spacing: 10) {
+            WrappingHStack(horizontalSpacing: 10, verticalSpacing: 8) {
                 Button(isTesting ? "Testing" : "Test connection") { testConnection() }
                     .buttonStyle(.bordered)
                     .tint(Theme.brand)
@@ -109,12 +109,15 @@ struct SettingsPage: View {
         ) {
             VStack(spacing: 16) {
                 settingsRow("Language", detail: "Auto-detect, English or German") {
-                    Picker("Language", selection: languageBinding) {
-                        Text("Auto-detect").tag(LanguagePin.auto)
-                        Text("English").tag(LanguagePin.en)
-                        Text("German").tag(LanguagePin.de)
-                    }
-                    .labelsHidden()
+                    BrandedMenuPicker(
+                        title: "Language",
+                        selection: languageBinding,
+                        options: [
+                            ("Auto-detect", LanguagePin.auto),
+                            ("English", LanguagePin.en),
+                            ("German", LanguagePin.de),
+                        ]
+                    )
                     .frame(width: 170)
                 }
 
@@ -163,6 +166,7 @@ struct SettingsPage: View {
                 .pickerStyle(.segmented)
                 .frame(maxWidth: 420)
                 .tint(Theme.brand)
+                .clickableCursor()
 
                 if providerKind == .azureOpenAI {
                     azureFields
@@ -384,10 +388,11 @@ struct SettingsPage: View {
     }
 
     private func hotkeyPicker(selection: Binding<Int>) -> some View {
-        Picker("Hotkey", selection: selection) {
-            ForEach(HotkeyOption.all) { option in Text(option.label).tag(option.keycode) }
-        }
-        .labelsHidden()
+        BrandedMenuPicker(
+            title: "Hotkey",
+            selection: selection,
+            options: HotkeyOption.all.map { ($0.label, $0.keycode) }
+        )
         .frame(width: 170)
     }
 

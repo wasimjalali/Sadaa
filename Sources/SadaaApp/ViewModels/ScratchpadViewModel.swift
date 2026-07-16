@@ -120,6 +120,15 @@ final class ScratchpadViewModel: ObservableObject {
         loadSelectedDraft()
     }
 
+    @discardableResult
+    func createDictationNote(_ text: String) -> ScratchpadNote? {
+        guard let note = store.captureDictation(text) else { return nil }
+        refresh()
+        selectedID = note.id
+        loadSelectedDraft()
+        return note
+    }
+
     func exportMarkdownForSelected() -> String? {
         guard let selectedID else { return nil }
         return store.exportMarkdown(id: selectedID)

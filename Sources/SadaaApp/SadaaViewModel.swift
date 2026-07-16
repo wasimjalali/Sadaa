@@ -134,7 +134,7 @@ final class SadaaViewModel: ObservableObject {
     }
 
     func sendToScratchpad(_ record: DictationRecord) {
-        scratchpad.appendTextToSelectedOrCreate(record.text)
+        scratchpad.createDictationNote(record.text)
     }
 
     func reprocessHistoryWithLanguageMemory(_ record: DictationRecord) {
