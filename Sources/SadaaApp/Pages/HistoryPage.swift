@@ -25,7 +25,7 @@ struct HistoryPage: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 22) {
+        FillRemainingHeightLayout(spacing: 22) {
             header
             workspace
         }
@@ -211,30 +211,24 @@ struct HistoryPage: View {
     }
 
     private func detailActions(_ record: DictationRecord) -> some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(spacing: 10) { actionButtons(record) }
-                .fixedSize(horizontal: true, vertical: false)
-            VStack(alignment: .leading, spacing: 8) { actionButtons(record) }
+        WrappingHStack(horizontalSpacing: 10, verticalSpacing: 8) {
+            Button("Learn correction") { beginCorrection(record) }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.brand)
+                .clickableCursor()
+            Button("Send to notes") { viewModel.sendToScratchpad(record) }
+                .buttonStyle(.bordered)
+                .tint(Theme.brand)
+                .clickableCursor()
+            Button("Reprocess") { viewModel.reprocessHistoryWithLanguageMemory(record) }
+                .buttonStyle(.bordered)
+                .tint(Theme.brand)
+                .clickableCursor()
+            Button("Delete", role: .destructive) { delete(record) }
+                .buttonStyle(.borderless)
+                .clickableCursor()
         }
-    }
-
-    @ViewBuilder
-    private func actionButtons(_ record: DictationRecord) -> some View {
-        Button("Learn correction") { beginCorrection(record) }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.brand)
-            .clickableCursor()
-        Button("Send to notes") { viewModel.sendToScratchpad(record) }
-            .buttonStyle(.bordered)
-            .tint(Theme.brand)
-            .clickableCursor()
-        Button("Reprocess") { viewModel.reprocessHistoryWithLanguageMemory(record) }
-            .buttonStyle(.bordered)
-            .tint(Theme.brand)
-            .clickableCursor()
-        Button("Delete", role: .destructive) { delete(record) }
-            .buttonStyle(.borderless)
-            .clickableCursor()
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func technicalDetails(_ record: DictationRecord) -> some View {

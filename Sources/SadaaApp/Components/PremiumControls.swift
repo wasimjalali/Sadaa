@@ -1,5 +1,6 @@
 import AppKit
 import SwiftUI
+import SadaaCore
 
 private struct ClickableCursorModifier: ViewModifier {
     let enabled: Bool
@@ -145,6 +146,61 @@ struct PremiumSearchField: View {
     }
 }
 
+struct BrandedMenuPicker<Value: Hashable>: View {
+    let title: String
+    @Binding var selection: Value
+    let options: [(label: String, value: Value)]
+
+    private var selectedLabel: String {
+        options.first { $0.value == selection }?.label ?? title
+    }
+
+    var body: some View {
+        Menu {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                Button {
+                    selection = option.value
+                } label: {
+                    if option.value == selection {
+                        Label(option.label, systemImage: "checkmark")
+                    } else {
+                        Text(option.label)
+                    }
+                }
+            }
+        } label: {
+            HStack(spacing: 10) {
+                Text(selectedLabel)
+                    .lineLimit(1)
+                Spacer(minLength: 8)
+                Image(systemName: "chevron.up.chevron.down")
+                    .font(.system(size: 9, weight: .semibold))
+                    .foregroundStyle(Theme.muted)
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(Theme.ink)
+            .frame(maxWidth: .infinity)
+            .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .padding(.horizontal, 11)
+        .frame(height: 32)
+        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .strokeBorder(Theme.brand.opacity(0.24), lineWidth: 1)
+        )
+        .fixedSize(horizontal: false, vertical: true)
+        .help(title)
+        .accessibilityLabel(title)
+        .accessibilityValue(selectedLabel)
+        .clickableCursor()
+    }
+}
+
 struct PremiumSection<Content: View>: View {
     let title: String
     let icon: String?
@@ -179,6 +235,288 @@ struct PremiumSection<Content: View>: View {
     }
 }
 
+struct FillRemainingHeightLayout: Layout {
+    let spacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let metrics = metrics(for: proposal, subviews: subviews)
+        return CGSize(width: metrics.width, height: metrics.height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+        let metrics = metrics(
+            for: ProposedViewSize(width: bounds.width, height: bounds.height),
+            subviews: subviews
+        )
+
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: metrics.fixedSize.height)
+        )
+        subviews[1].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY + metrics.fixedSize.height + spacing),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: bounds.width, height: metrics.remainingHeight)
+        )
+    }
+
+    private func metrics(for proposal: ProposedViewSize, subviews: Subviews) -> Metrics {
+        guard subviews.count == 2 else { return .zero }
+
+        let proposedWidth = finite(proposal.width)
+        let fixedSize = subviews[0].sizeThatFits(
+            ProposedViewSize(width: proposedWidth, height: nil)
+        )
+        let width = proposedWidth ?? fixedSize.width
+
+        guard let proposedHeight = finite(proposal.height) else {
+            let flexibleSize = subviews[1].sizeThatFits(
+                ProposedViewSize(width: width, height: nil)
+            )
+            return Metrics(
+                width: max(width, flexibleSize.width),
+                height: fixedSize.height + spacing + flexibleSize.height,
+                fixedSize: fixedSize,
+                remainingHeight: flexibleSize.height
+            )
+        }
+
+        let remainingHeight = CGFloat(ResponsiveLayoutRules.remainingHeight(
+            totalHeight: Double(proposedHeight),
+            fixedHeight: Double(fixedSize.height),
+            spacing: Double(spacing)
+        ))
+        return Metrics(
+            width: width,
+            height: proposedHeight,
+            fixedSize: fixedSize,
+            remainingHeight: remainingHeight
+        )
+    }
+
+    private func finite(_ value: CGFloat?) -> CGFloat? {
+        guard let value, value.isFinite else { return nil }
+        return value
+    }
+
+    private struct Metrics {
+        let width: CGFloat
+        let height: CGFloat
+        let fixedSize: CGSize
+        let remainingHeight: CGFloat
+
+        static let zero = Metrics(width: 0, height: 0, fixedSize: .zero, remainingHeight: 0)
+    }
+}
+
+struct WrappingHStack: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let layout = layout(for: proposal.width, subviews: subviews)
+        return CGSize(width: layout.width, height: layout.height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        let layout = layout(for: bounds.width, subviews: subviews)
+        var y = bounds.minY
+
+        for row in layout.rows {
+            var x = bounds.minX
+            let rowHeight = row.map { layout.itemSizes[$0].height }.max() ?? 0
+            for index in row {
+                let size = layout.itemSizes[index]
+                subviews[index].place(
+                    at: CGPoint(x: x, y: y),
+                    anchor: .topLeading,
+                    proposal: ProposedViewSize(width: size.width, height: size.height)
+                )
+                x += size.width + horizontalSpacing
+            }
+            y += rowHeight + verticalSpacing
+        }
+    }
+
+    private func layout(for proposedWidth: CGFloat?, subviews: Subviews) -> Metrics {
+        let itemSizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        let naturalWidth = itemSizes.reduce(0) { $0 + $1.width }
+            + horizontalSpacing * CGFloat(max(0, itemSizes.count - 1))
+        let availableWidth = finite(proposedWidth) ?? naturalWidth
+        let rows = ResponsiveLayoutRules.rows(
+            availableWidth: Double(max(0, availableWidth)),
+            itemWidths: itemSizes.map { Double($0.width) },
+            spacing: Double(horizontalSpacing)
+        )
+        let rowWidths = rows.map { row in
+            row.reduce(0) { $0 + itemSizes[$1].width }
+                + horizontalSpacing * CGFloat(max(0, row.count - 1))
+        }
+        let rowHeights = rows.map { row in
+            row.map { itemSizes[$0].height }.max() ?? 0
+        }
+        let height = rowHeights.reduce(0, +)
+            + verticalSpacing * CGFloat(max(0, rows.count - 1))
+
+        return Metrics(
+            width: finite(proposedWidth) ?? (rowWidths.max() ?? 0),
+            height: height,
+            itemSizes: itemSizes,
+            rows: rows
+        )
+    }
+
+    private func finite(_ value: CGFloat?) -> CGFloat? {
+        guard let value, value.isFinite else { return nil }
+        return value
+    }
+
+    private struct Metrics {
+        let width: CGFloat
+        let height: CGFloat
+        let itemSizes: [CGSize]
+        let rows: [[Int]]
+    }
+}
+
+private struct CommandPageHeaderLayout: Layout {
+    let horizontalSpacing: CGFloat
+    let verticalSpacing: CGFloat
+    let minimumTitleWidth: CGFloat
+
+    func sizeThatFits(
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) -> CGSize {
+        let metrics = metrics(for: proposal.width, subviews: subviews)
+        return CGSize(width: metrics.width, height: metrics.height)
+    }
+
+    func placeSubviews(
+        in bounds: CGRect,
+        proposal: ProposedViewSize,
+        subviews: Subviews,
+        cache: inout ()
+    ) {
+        guard subviews.count == 2 else { return }
+        let metrics = metrics(for: bounds.width, subviews: subviews)
+
+        subviews[0].place(
+            at: CGPoint(x: bounds.minX, y: bounds.minY),
+            anchor: .topLeading,
+            proposal: ProposedViewSize(width: metrics.titleSize.width, height: metrics.titleSize.height)
+        )
+
+        let accessoryOrigin: CGPoint
+        switch metrics.axis {
+        case .horizontal:
+            accessoryOrigin = CGPoint(
+                x: bounds.maxX - metrics.accessorySize.width,
+                y: bounds.minY
+            )
+        case .vertical:
+            accessoryOrigin = CGPoint(
+                x: bounds.minX,
+                y: bounds.minY + metrics.titleSize.height + verticalSpacing
+            )
+        }
+        subviews[1].place(
+            at: accessoryOrigin,
+            anchor: .topLeading,
+            proposal: ProposedViewSize(
+                width: metrics.accessorySize.width,
+                height: metrics.accessorySize.height
+            )
+        )
+    }
+
+    private func metrics(for proposedWidth: CGFloat?, subviews: Subviews) -> Metrics {
+        guard subviews.count == 2 else { return .zero }
+
+        let titleIdeal = subviews[0].sizeThatFits(.unspecified)
+        let accessorySize = subviews[1].sizeThatFits(.unspecified)
+        let accessorySpacing = accessorySize.width > 0 ? horizontalSpacing : 0
+        let naturalWidth = titleIdeal.width + accessorySpacing + accessorySize.width
+        let availableWidth = finite(proposedWidth) ?? naturalWidth
+        let axis = accessorySize.width == 0
+            ? ResponsiveLayoutAxis.horizontal
+            : ResponsiveLayoutRules.headerAxis(
+                availableWidth: Double(availableWidth),
+                accessoryWidth: Double(accessorySize.width),
+                minimumTitleWidth: Double(minimumTitleWidth),
+                spacing: Double(horizontalSpacing)
+            )
+
+        switch axis {
+        case .horizontal:
+            let titleWidth = max(0, availableWidth - accessorySize.width - accessorySpacing)
+            let titleSize = subviews[0].sizeThatFits(
+                ProposedViewSize(width: titleWidth, height: nil)
+            )
+            return Metrics(
+                axis: axis,
+                width: availableWidth,
+                height: max(titleSize.height, accessorySize.height),
+                titleSize: CGSize(width: titleWidth, height: titleSize.height),
+                accessorySize: accessorySize
+            )
+        case .vertical:
+            let titleSize = subviews[0].sizeThatFits(
+                ProposedViewSize(width: availableWidth, height: nil)
+            )
+            return Metrics(
+                axis: axis,
+                width: availableWidth,
+                height: titleSize.height + verticalSpacing + accessorySize.height,
+                titleSize: titleSize,
+                accessorySize: accessorySize
+            )
+        }
+    }
+
+    private func finite(_ value: CGFloat?) -> CGFloat? {
+        guard let value, value.isFinite else { return nil }
+        return value
+    }
+
+    private struct Metrics {
+        let axis: ResponsiveLayoutAxis
+        let width: CGFloat
+        let height: CGFloat
+        let titleSize: CGSize
+        let accessorySize: CGSize
+
+        static let zero = Metrics(
+            axis: .horizontal,
+            width: 0,
+            height: 0,
+            titleSize: .zero,
+            accessorySize: .zero
+        )
+    }
+}
+
 struct CommandPageHeader<Accessory: View>: View {
     let eyebrow: String?
     let title: String
@@ -196,19 +534,14 @@ struct CommandPageHeader<Accessory: View>: View {
     }
 
     var body: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 18) {
-                titleBlock
-                Spacer(minLength: 12)
-                accessory
-                    .fixedSize(horizontal: true, vertical: false)
-            }
-
-            VStack(alignment: .leading, spacing: 14) {
-                titleBlock
-                accessory
-                    .fixedSize(horizontal: true, vertical: false)
-            }
+        CommandPageHeaderLayout(
+            horizontalSpacing: 18,
+            verticalSpacing: 14,
+            minimumTitleWidth: 340
+        ) {
+            titleBlock
+            accessory
+                .fixedSize(horizontal: true, vertical: false)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
     }

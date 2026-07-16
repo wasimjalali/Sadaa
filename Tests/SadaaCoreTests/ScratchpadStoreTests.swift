@@ -35,6 +35,24 @@ import Foundation
         #expect(store.search("missing").isEmpty)
     }
 
+    @Test func testCaptureDictationCreatesDedicatedNote() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = ScratchpadStore(fileURL: url)
+        _ = store.add(title: "Existing", body: "Keep this separate", tags: [],
+                      createdAt: Date(timeIntervalSince1970: 1))
+
+        let note = store.captureDictation(
+            "  New transcript  ",
+            createdAt: Date(timeIntervalSince1970: 2)
+        )
+
+        #expect(note?.title == "Dictation")
+        #expect(note?.body == "New transcript")
+        #expect(store.all().map(\.title) == ["Dictation", "Existing"])
+        #expect(store.all().last?.body == "Keep this separate")
+    }
+
     @Test func testDuplicateAndExportMarkdown() {
         let url = tempFile()
         defer { try? FileManager.default.removeItem(at: url) }

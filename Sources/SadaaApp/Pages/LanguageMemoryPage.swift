@@ -115,6 +115,7 @@ struct LanguageMemoryPage: View {
             .pickerStyle(.segmented)
             .frame(maxWidth: 360)
             .tint(Theme.brand)
+            .clickableCursor()
 
             PremiumSearchField(placeholder: "Search dictionary", text: $viewModel.query)
                 .frame(maxWidth: 360)
@@ -152,17 +153,27 @@ struct LanguageMemoryPage: View {
                             .premiumInputChrome()
                         TextField("Optional note", text: $notes)
                             .premiumInputChrome()
-                        HStack(spacing: 12) {
-                            Picker("Priority", selection: $priority) {
-                                Text("Normal").tag(MemoryPriority.normal)
-                                Text("High").tag(MemoryPriority.high)
-                                Text("Always").tag(MemoryPriority.always)
-                            }
-                            Picker("Language", selection: $wordLanguage) {
-                                Text("Any language").tag(MemoryLanguage.auto)
-                                Text("English").tag(MemoryLanguage.en)
-                                Text("German").tag(MemoryLanguage.de)
-                            }
+                        WrappingHStack(horizontalSpacing: 12, verticalSpacing: 8) {
+                            BrandedMenuPicker(
+                                title: "Priority",
+                                selection: $priority,
+                                options: [
+                                    ("Normal", MemoryPriority.normal),
+                                    ("High", MemoryPriority.high),
+                                    ("Always", MemoryPriority.always),
+                                ]
+                            )
+                            .frame(width: 150)
+                            BrandedMenuPicker(
+                                title: "Language",
+                                selection: $wordLanguage,
+                                options: [
+                                    ("Any language", MemoryLanguage.auto),
+                                    ("English", MemoryLanguage.en),
+                                    ("German", MemoryLanguage.de),
+                                ]
+                            )
+                            .frame(width: 170)
                         }
                     }
                     .padding(.top, 10)
@@ -194,17 +205,27 @@ struct LanguageMemoryPage: View {
                 }
 
                 DisclosureGroup("Advanced matching") {
-                    HStack(spacing: 12) {
-                        Picker("Match", selection: $matchMode) {
-                            Text("Word boundary").tag(ReplacementMatchMode.wordBoundaryPhrase)
-                            Text("Case-insensitive").tag(ReplacementMatchMode.caseInsensitivePhrase)
-                            Text("Exact phrase").tag(ReplacementMatchMode.exactPhrase)
-                        }
-                        Picker("Language", selection: $replacementLanguage) {
-                            Text("Any language").tag(MemoryLanguage.auto)
-                            Text("English").tag(MemoryLanguage.en)
-                            Text("German").tag(MemoryLanguage.de)
-                        }
+                    WrappingHStack(horizontalSpacing: 12, verticalSpacing: 8) {
+                        BrandedMenuPicker(
+                            title: "Match",
+                            selection: $matchMode,
+                            options: [
+                                ("Word boundary", ReplacementMatchMode.wordBoundaryPhrase),
+                                ("Case-insensitive", ReplacementMatchMode.caseInsensitivePhrase),
+                                ("Exact phrase", ReplacementMatchMode.exactPhrase),
+                            ]
+                        )
+                        .frame(width: 170)
+                        BrandedMenuPicker(
+                            title: "Language",
+                            selection: $replacementLanguage,
+                            options: [
+                                ("Any language", MemoryLanguage.auto),
+                                ("English", MemoryLanguage.en),
+                                ("German", MemoryLanguage.de),
+                            ]
+                        )
+                        .frame(width: 170)
                     }
                     .padding(.top, 10)
                 }
@@ -315,6 +336,8 @@ struct LanguageMemoryPage: View {
                 ForEach(ImportKind.allCases) { kind in Text(kind.title).tag(kind) }
             }
             .pickerStyle(.segmented)
+            .tint(Theme.brand)
+            .clickableCursor()
 
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
