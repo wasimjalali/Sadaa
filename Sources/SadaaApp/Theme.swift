@@ -1,24 +1,32 @@
 import SwiftUI
 
-/// Karko AI brand palette, single source of truth for SadaaApp colors.
+/// Role-based light palette for the Sadaa desktop app.
 enum Theme {
     static func rgb(_ r: Int, _ g: Int, _ b: Int) -> Color {
         Color(red: Double(r) / 255, green: Double(g) / 255, blue: Double(b) / 255)
     }
-    static let navy        = rgb(0x1E, 0x3A, 0x5F)
-    static let navy800     = rgb(0x12, 0x24, 0x3B)
-    static let gold        = rgb(0xD4, 0xA8, 0x53)
-    static let gold300     = rgb(0xE0, 0xC6, 0x87)
-    static let cream       = rgb(0xFA, 0xF7, 0xF2)
-    static let creamSurface = rgb(0xFE, 0xFD, 0xFB)
-    static let sage        = rgb(0x5B, 0x8A, 0x72)
-    static let charcoal    = rgb(0x2D, 0x37, 0x48)
-    static let white       = Color.white
-    static let ink         = rgb(0x18, 0x24, 0x33)
-    static let muted       = rgb(0x6B, 0x73, 0x80)
-    static let line        = rgb(0xE6, 0xDD, 0xCD)
-    static let surface     = creamSurface
-    static let focus       = gold
-    static let warning     = rgb(0xB8, 0x71, 0x2C)
-    static let red         = rgb(0xB4, 0x23, 0x2F)
+    static let surface = Color.white
+    static let surfaceSubtle = rgb(0xF8, 0xF6, 0xF0)
+    static let brand = rgb(0x10, 0x2A, 0x43)
+    static let brandStrong = rgb(0x07, 0x1B, 0x2D)
+    static let accent = rgb(0xC4, 0x9A, 0x46)
+    static let ink = rgb(0x13, 0x22, 0x38)
+    static let muted = rgb(0x66, 0x70, 0x85)
+    static let line = rgb(0xE5, 0xE7, 0xEB)
+    static let danger = rgb(0xB4, 0x23, 0x18)
+    static let success = rgb(0x2F, 0x6B, 0x4F)
+    static let warning = rgb(0x9A, 0x67, 0x16)
+
+    // Compatibility aliases while pages migrate to role names.
+    static let navy = brand
+    static let navy800 = brandStrong
+    static let gold = accent
+    static let gold300 = accent.opacity(0.55)
+    static let cream = surface
+    static let creamSurface = surfaceSubtle
+    static let sage = success
+    static let charcoal = ink
+    static let white = surface
+    static let focus = accent
+    static let red = danger
 }

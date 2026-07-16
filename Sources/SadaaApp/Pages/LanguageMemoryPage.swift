@@ -5,614 +5,426 @@ import SadaaCore
 struct LanguageMemoryPage: View {
     @ObservedObject var viewModel: LanguageMemoryViewModel
 
-    @State private var mode: MemoryMode = .terms
-    @State private var termPhrase = ""
-    @State private var termPronunciations = ""
-    @State private var termAliases = ""
-    @State private var termNotes = ""
-    @State private var termPriority: MemoryPriority = .high
-    @State private var termLanguage: MemoryLanguage = .auto
-    @State private var correctionHeard = ""
-    @State private var correctionWrite = ""
-    @State private var correctionMode: ReplacementMatchMode = .wordBoundaryPhrase
-    @State private var correctionLanguage: MemoryLanguage = .auto
-    @State private var correctionPreviewText = ""
+    @State private var section: DictionarySection = .words
+    @State private var word = ""
+    @State private var pronunciations = ""
+    @State private var aliases = ""
+    @State private var notes = ""
+    @State private var priority: MemoryPriority = .high
+    @State private var wordLanguage: MemoryLanguage = .auto
+    @State private var heard = ""
+    @State private var replacement = ""
+    @State private var replacementLanguage: MemoryLanguage = .auto
+    @State private var matchMode: ReplacementMatchMode = .wordBoundaryPhrase
     @State private var snippetTrigger = ""
     @State private var snippetExpansion = ""
-    @State private var snippetTags = ""
-    @State private var snippetLanguage: MemoryLanguage = .auto
     @State private var showImport = false
-    @State private var importKind: MemoryImportKind = .json
+    @State private var importKind: ImportKind = .json
     @State private var importText = ""
-    @State private var importError = ""
-    @State private var copiedExport = false
+    @State private var importMessage = ""
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: 22) {
                 header
-                workbench
+                if !viewModel.suggestions.isEmpty { suggestions }
+                sectionPicker
+                quickAdd
+                entries
+                shortcuts
             }
-            .padding(30)
-            .frame(maxWidth: 1120, alignment: .topLeading)
+            .padding(32)
+            .frame(maxWidth: 980, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
-        .background(Theme.cream)
+        .background(Theme.surface)
         .sheet(isPresented: $showImport) { importSheet }
     }
 
     private var header: some View {
         CommandPageHeader(
-            eyebrow: "Learning system",
-            title: "Memory",
-            subtitle: "Teach Sadaa exact AI terms, deterministic corrections, snippets, and learning signals."
+            title: "Dictionary",
+            subtitle: "Teach Sadaa the exact words, names and corrections that matter to you."
         ) {
-            HStack(spacing: 8) {
-                exportMenu
-                importMenu
-            }
-        }
-    }
-
-    private var workbench: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 16) {
-                rail
-                    .frame(width: 250)
-                listPanel
-                    .frame(minWidth: 360, maxWidth: .infinity)
-                inspector
-                    .frame(width: 330)
-            }
-
-            VStack(alignment: .leading, spacing: 16) {
-                rail
-                    .frame(maxWidth: .infinity)
-                inspector
-                    .frame(maxWidth: .infinity)
-                listPanel
-                    .frame(maxWidth: .infinity)
-            }
-        }
-    }
-
-    private var rail: some View {
-        CommandPanel {
-            VStack(alignment: .leading, spacing: 14) {
-                PremiumSearchField(
-                    placeholder: "Search memory",
-                    text: $viewModel.query
-                )
-                Picker("", selection: $mode) {
-                    ForEach(MemoryMode.allCases) { item in
-                        Text(item.shortTitle).tag(item)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                VStack(spacing: 10) {
-                    CommandMetric(icon: "textformat", value: "\(viewModel.terms.count)", label: "terms", tint: Theme.navy)
-                    CommandMetric(icon: "arrow.left.arrow.right", value: "\(viewModel.replacements.count)", label: "corrections", tint: Theme.sage)
-                    CommandMetric(icon: "text.badge.plus", value: "\(viewModel.snippets.count)", label: "snippets", tint: Theme.gold)
-                    CommandMetric(icon: "sparkles", value: "\(viewModel.suggestions.count)", label: "learning queue", tint: Theme.navy)
-                }
+            Menu {
+                Button("Copy full backup") { copy(viewModel.exportSnapshotJSON()) }
+                Button("Copy words as CSV") { copy(viewModel.exportTermsCSV()) }
+                Button("Copy corrections as CSV") { copy(viewModel.exportReplacementsCSV()) }
                 Divider()
-                Text("Corrections are local and deterministic. If Sadaa hears the same mistake again, this layer fixes it before and after GPT formatting.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+                Button("Import dictionary") {
+                    importText = ""
+                    importMessage = ""
+                    showImport = true
+                }
+            } label: {
+                Label("Import and export", systemImage: "ellipsis.circle")
+                    .labelStyle(.iconOnly)
+            }
+            .menuStyle(.borderlessButton)
+            .frame(width: 34)
+            .help("Import and export")
+            .clickableCursor()
+        }
+    }
+
+    private var suggestions: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Suggestions to review")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Text("Sadaa noticed these spellings in recent corrections.")
+                        .font(.system(size: 11))
+                        .foregroundStyle(Theme.muted)
+                }
+                Spacer()
+                Text("\(viewModel.suggestions.count)")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.brand)
+            }
+
+            ForEach(viewModel.filteredSuggestions.prefix(3)) { suggestion in
+                HStack(spacing: 10) {
+                    Text(suggestion.proposed)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(Theme.ink)
+                    Spacer()
+                    Button("Dismiss") { viewModel.dismissSuggestion(suggestion.id) }
+                        .buttonStyle(.borderless)
+                        .clickableCursor()
+                    Button("Add") { viewModel.acceptSuggestion(suggestion.id, as: suggestion.kind) }
+                        .buttonStyle(.bordered)
+                        .tint(Theme.brand)
+                        .clickableCursor()
+                }
+                .padding(.vertical, 3)
             }
         }
+        .padding(16)
+        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
     }
 
-    private var listPanel: some View {
-        CommandPanel(mode.title, icon: mode.icon) {
-            ScrollView {
-                VStack(spacing: 10) {
-                    switch mode {
-                    case .terms:
-                        termList
-                    case .corrections:
-                        correctionList
-                    case .snippets:
-                        snippetList
-                    case .learning:
-                        suggestionList
-                    }
-                }
-                .padding(.bottom, 4)
-            }
-            .frame(maxHeight: .infinity)
-        }
-    }
-
-    @ViewBuilder
-    private var inspector: some View {
-        switch mode {
-        case .terms:
-            termComposer
-        case .corrections:
-            correctionComposer
-        case .snippets:
-            snippetComposer
-        case .learning:
-            learningInspector
-        }
-    }
-
-    private var termComposer: some View {
-        CommandPanel("Add term", icon: "textformat") {
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("Phrase, name, acronym, product", text: $termPhrase)
-                    .premiumInputChrome()
-                TextField("Pronunciations, comma separated", text: $termPronunciations)
-                    .premiumInputChrome()
-                TextField("Aliases, comma separated", text: $termAliases)
-                    .premiumInputChrome()
-                TextField("Notes", text: $termNotes)
-                    .premiumInputChrome()
-                Picker("Priority", selection: $termPriority) {
-                    ForEach(MemoryPriority.allCases, id: \.self) { priority in
-                        Text(priorityTitle(priority)).tag(priority)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                Picker("Language", selection: $termLanguage) {
-                    ForEach(MemoryLanguage.allCases, id: \.self) { language in
-                        Text(languageTitle(language)).tag(language)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                Button {
-                    viewModel.addTerm(
-                        phrase: termPhrase,
-                        pronunciations: split(termPronunciations),
-                        aliases: split(termAliases),
-                        priority: termPriority,
-                        language: termLanguage,
-                        notes: termNotes
-                    )
-                    termPhrase = ""
-                    termPronunciations = ""
-                    termAliases = ""
-                    termNotes = ""
-                    termPriority = .high
-                    termLanguage = .auto
-                } label: {
-                    Label("Add term", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
-                .clickableCursor()
-                .disabled(termPhrase.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private var correctionComposer: some View {
-        CommandPanel("Add correction", icon: "arrow.left.arrow.right") {
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("When Sadaa hears", text: $correctionHeard)
-                    .premiumInputChrome()
-                TextField("Write this", text: $correctionWrite)
-                    .premiumInputChrome()
-                Picker("Match", selection: $correctionMode) {
-                    Text("Exact").tag(ReplacementMatchMode.exactPhrase)
-                    Text("Case").tag(ReplacementMatchMode.caseInsensitivePhrase)
-                    Text("Boundary").tag(ReplacementMatchMode.wordBoundaryPhrase)
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                Picker("Language", selection: $correctionLanguage) {
-                    ForEach(MemoryLanguage.allCases, id: \.self) { language in
-                        Text(languageTitle(language)).tag(language)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                TextField("Preview on sample text", text: $correctionPreviewText)
-                    .premiumInputChrome()
-                if let correctionPreview {
-                    previewBox(correctionPreview)
-                }
-                Button {
-                    viewModel.addReplacement(
-                        match: correctionHeard,
-                        replacement: correctionWrite,
-                        mode: correctionMode,
-                        language: correctionLanguage
-                    )
-                    correctionHeard = ""
-                    correctionWrite = ""
-                    correctionLanguage = .auto
-                    correctionPreviewText = ""
-                } label: {
-                    Label("Add correction", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
-                .clickableCursor()
-                .disabled(correctionHeard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          correctionWrite.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private var snippetComposer: some View {
-        CommandPanel("Add snippet", icon: "text.badge.plus") {
-            VStack(alignment: .leading, spacing: 10) {
-                TextField("Trigger, e.g. my signature", text: $snippetTrigger)
-                    .premiumInputChrome()
-                TextField("Tags, comma separated", text: $snippetTags)
-                    .premiumInputChrome()
-                Picker("Language", selection: $snippetLanguage) {
-                    ForEach(MemoryLanguage.allCases, id: \.self) { language in
-                        Text(languageTitle(language)).tag(language)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .tint(Theme.navy)
-                .accentColor(Theme.navy)
-                .clickableCursor()
-                TextEditor(text: $snippetExpansion)
-                    .font(.system(size: 12))
-                    .foregroundStyle(Theme.ink)
-                    .scrollContentBackground(.hidden)
-                    .frame(minHeight: 120)
-                    .padding(8)
-                    .background(Theme.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
-                Button {
-                    viewModel.addSnippet(
-                        trigger: snippetTrigger,
-                        expansion: snippetExpansion,
-                        tags: split(snippetTags),
-                        language: snippetLanguage
-                    )
-                    snippetTrigger = ""
-                    snippetExpansion = ""
-                    snippetTags = ""
-                    snippetLanguage = .auto
-                } label: {
-                    Label("Add snippet", systemImage: "plus")
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
-                .clickableCursor()
-                .disabled(snippetTrigger.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                          snippetExpansion.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-        }
-    }
-
-    private var learningInspector: some View {
-        CommandPanel("How Memory learns", icon: "sparkles") {
-            VStack(alignment: .leading, spacing: 12) {
-                learningStep("1", "Formatter finds unusual AI terms.")
-                learningStep("2", "History corrections become deterministic rules.")
-                learningStep("3", "Accepted queue items stop repeated mistakes.")
-                Divider()
-                Text("Use History or Home's Learn action when Sadaa misses a name, framework, acronym, or phrase. Corrections are stronger than terms.")
-                    .font(.system(size: 12, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-        }
-    }
-
-    private func learningStep(_ number: String, _ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Text(number)
-                .font(.system(size: 11, weight: .bold))
-                .foregroundStyle(Theme.navy)
-                .frame(width: 22, height: 22)
-                .background(Theme.gold.opacity(0.18), in: Circle())
-            Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.ink)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    @ViewBuilder
-    private var termList: some View {
-        if viewModel.filteredTerms.isEmpty {
-            CommandEmptyState(icon: "textformat", title: "No terms yet", detail: "Add names, products, APIs, and acronyms Sadaa must spell correctly.")
-        } else {
-            ForEach(viewModel.filteredTerms) { term in
-                MemoryTermRow(term: term) {
-                    viewModel.removeTerm(id: term.id)
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var correctionList: some View {
-        if viewModel.filteredReplacements.isEmpty {
-            CommandEmptyState(icon: "arrow.left.arrow.right", title: "No corrections yet", detail: "Create deterministic fixes such as cloud code -> Claude Code.")
-        } else {
-            ForEach(viewModel.filteredReplacements) { rule in
-                ReplacementRuleRow(
-                    rule: rule,
-                    onToggleEnabled: {
-                        viewModel.setReplacementEnabled(rule.id, isEnabled: !rule.isEnabled)
-                    },
-                    onDelete: {
-                        viewModel.removeReplacement(id: rule.id)
-                    }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var snippetList: some View {
-        if viewModel.filteredSnippets.isEmpty {
-            CommandEmptyState(icon: "text.badge.plus", title: "No snippets yet", detail: "Add spoken shortcuts for reusable replies, signatures, and AI workflow text.")
-        } else {
-            ForEach(viewModel.filteredSnippets) { snippet in
-                MemorySnippetRow(
-                    snippet: snippet,
-                    onToggleEnabled: {
-                        viewModel.setSnippetEnabled(snippet.id, isEnabled: !snippet.isEnabled)
-                    },
-                    onDelete: {
-                        viewModel.removeSnippet(id: snippet.id)
-                    }
-                )
-            }
-        }
-    }
-
-    @ViewBuilder
-    private var suggestionList: some View {
-        if viewModel.filteredSuggestions.isEmpty {
-            CommandEmptyState(icon: "sparkles", title: "Learning queue is clear", detail: "New terms and correction candidates appear here as evidence builds.")
-        } else {
-            ForEach(viewModel.filteredSuggestions) { suggestion in
-                MemorySuggestionRow(
-                    suggestion: suggestion,
-                    onAccept: { viewModel.acceptSuggestion(suggestion.id, as: suggestion.kind) },
-                    onDismiss: { viewModel.dismissSuggestion(suggestion.id) }
-                )
-            }
-        }
-    }
-
-    private var correctionPreview: String? {
-        let sample = correctionPreviewText.trimmingCharacters(in: .whitespacesAndNewlines)
-        let match = correctionHeard.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = correctionWrite.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !sample.isEmpty, !match.isEmpty, !value.isEmpty else { return nil }
-        let rule = ReplacementRule(
-            match: match,
-            replacement: value,
-            matchMode: correctionMode,
-            language: correctionLanguage
-        )
-        return ReplacementEngine.apply([rule], to: sample, language: correctionLanguage).text
-    }
-
-    private func previewBox(_ text: String) -> some View {
-        HStack(alignment: .top, spacing: 8) {
-            Image(systemName: "wand.and.stars")
-                .foregroundStyle(Theme.gold)
-            Text(text)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.ink)
-                .lineLimit(4)
-        }
-        .padding(10)
-        .background(Theme.gold.opacity(0.09), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.gold.opacity(0.2), lineWidth: 1))
-    }
-
-    private var importSheet: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            CommandPageHeader(
-                eyebrow: "Memory",
-                title: "Import",
-                subtitle: "Paste a local Memory export or CSV. Matching entries are updated."
-            )
-            Picker("", selection: $importKind) {
-                ForEach(MemoryImportKind.allCases) { kind in
-                    Text(kind.title).tag(kind)
+    private var sectionPicker: some View {
+        HStack(spacing: 14) {
+            Picker("Dictionary section", selection: $section) {
+                ForEach(DictionarySection.allCases) { item in
+                    Text(item.title).tag(item)
                 }
             }
             .pickerStyle(.segmented)
-            .tint(Theme.navy)
-            .accentColor(Theme.navy)
+            .frame(maxWidth: 360)
+            .tint(Theme.brand)
+
+            PremiumSearchField(placeholder: "Search dictionary", text: $viewModel.query)
+                .frame(maxWidth: 360)
+            Spacer()
+        }
+    }
+
+    @ViewBuilder
+    private var quickAdd: some View {
+        switch section {
+        case .words: addWordPanel
+        case .corrections: addCorrectionPanel
+        }
+    }
+
+    private var addWordPanel: some View {
+        CommandPanel("Add a word or name") {
+            VStack(alignment: .leading, spacing: 12) {
+                HStack(spacing: 10) {
+                    TextField("Claude Code, Sadaa, MCP", text: $word)
+                        .premiumInputChrome()
+                    Button("Add word") { addWord() }
+                        .buttonStyle(.borderedProminent)
+                        .tint(Theme.brand)
+                        .controlSize(.large)
+                        .clickableCursor()
+                        .disabled(word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+
+                DisclosureGroup("Advanced spelling help") {
+                    VStack(alignment: .leading, spacing: 10) {
+                        TextField("Sounds like, comma separated", text: $pronunciations)
+                            .premiumInputChrome()
+                        TextField("Alternative spellings, comma separated", text: $aliases)
+                            .premiumInputChrome()
+                        TextField("Optional note", text: $notes)
+                            .premiumInputChrome()
+                        HStack(spacing: 12) {
+                            Picker("Priority", selection: $priority) {
+                                Text("Normal").tag(MemoryPriority.normal)
+                                Text("High").tag(MemoryPriority.high)
+                                Text("Always").tag(MemoryPriority.always)
+                            }
+                            Picker("Language", selection: $wordLanguage) {
+                                Text("Any language").tag(MemoryLanguage.auto)
+                                Text("English").tag(MemoryLanguage.en)
+                                Text("German").tag(MemoryLanguage.de)
+                            }
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    private var addCorrectionPanel: some View {
+        CommandPanel("Add an auto-correction") {
+            VStack(alignment: .leading, spacing: 12) {
+                ViewThatFits(in: .horizontal) {
+                    HStack(spacing: 10) {
+                        TextField("When Sadaa hears", text: $heard)
+                            .premiumInputChrome()
+                        Image(systemName: "arrow.right")
+                            .foregroundStyle(Theme.muted)
+                        TextField("Write this instead", text: $replacement)
+                            .premiumInputChrome()
+                        addCorrectionButton
+                    }
+                    VStack(spacing: 10) {
+                        TextField("When Sadaa hears", text: $heard).premiumInputChrome()
+                        TextField("Write this instead", text: $replacement).premiumInputChrome()
+                        addCorrectionButton.frame(maxWidth: .infinity, alignment: .trailing)
+                    }
+                }
+
+                DisclosureGroup("Advanced matching") {
+                    HStack(spacing: 12) {
+                        Picker("Match", selection: $matchMode) {
+                            Text("Word boundary").tag(ReplacementMatchMode.wordBoundaryPhrase)
+                            Text("Case-insensitive").tag(ReplacementMatchMode.caseInsensitivePhrase)
+                            Text("Exact phrase").tag(ReplacementMatchMode.exactPhrase)
+                        }
+                        Picker("Language", selection: $replacementLanguage) {
+                            Text("Any language").tag(MemoryLanguage.auto)
+                            Text("English").tag(MemoryLanguage.en)
+                            Text("German").tag(MemoryLanguage.de)
+                        }
+                    }
+                    .padding(.top, 10)
+                }
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(Theme.muted)
+            }
+        }
+    }
+
+    private var addCorrectionButton: some View {
+        Button("Add correction") { addCorrection() }
+            .buttonStyle(.borderedProminent)
+            .tint(Theme.brand)
+            .controlSize(.large)
             .clickableCursor()
+            .disabled(
+                heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
+                replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            )
+    }
+
+    private var entries: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                Text(section == .words ? "Saved words" : "Saved corrections")
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+                Spacer()
+                Text("\(section == .words ? viewModel.filteredTerms.count : viewModel.filteredReplacements.count)")
+                    .font(.system(size: 12).monospacedDigit())
+                    .foregroundStyle(Theme.muted)
+            }
+
+            if section == .words {
+                if viewModel.filteredTerms.isEmpty {
+                    emptyEntries("No saved words", "Add names, acronyms and specialist terms you want spelled exactly.")
+                } else {
+                    VStack(spacing: 0) {
+                        ForEach(viewModel.filteredTerms) { term in
+                            MemoryTermRow(term: term) { viewModel.removeTerm(id: term.id) }
+                        }
+                    }
+                }
+            } else if viewModel.filteredReplacements.isEmpty {
+                emptyEntries("No auto-corrections", "Add a correction when Sadaa repeatedly hears the wrong phrase.")
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.filteredReplacements) { rule in
+                        ReplacementRuleRow(
+                            rule: rule,
+                            onToggleEnabled: {
+                                viewModel.setReplacementEnabled(rule.id, isEnabled: !rule.isEnabled)
+                            },
+                            onDelete: { viewModel.removeReplacement(id: rule.id) }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
+    private var shortcuts: some View {
+        DisclosureGroup("Text shortcuts") {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("Say a short trigger and expand it into reusable text. This is optional and stays out of the main dictionary workflow.")
+                    .font(.system(size: 12))
+                    .foregroundStyle(Theme.muted)
+
+                HStack(spacing: 10) {
+                    TextField("Trigger", text: $snippetTrigger).premiumInputChrome()
+                    TextField("Expanded text", text: $snippetExpansion).premiumInputChrome()
+                    Button("Add shortcut") {
+                        viewModel.addSnippet(trigger: snippetTrigger, expansion: snippetExpansion)
+                        snippetTrigger = ""
+                        snippetExpansion = ""
+                    }
+                    .buttonStyle(.bordered)
+                    .tint(Theme.brand)
+                    .clickableCursor()
+                    .disabled(snippetTrigger.isEmpty || snippetExpansion.isEmpty)
+                }
+
+                ForEach(viewModel.filteredSnippets) { snippet in
+                    MemorySnippetRow(
+                        snippet: snippet,
+                        onToggleEnabled: {
+                            viewModel.setSnippetEnabled(snippet.id, isEnabled: !snippet.isEnabled)
+                        },
+                        onDelete: { viewModel.removeSnippet(id: snippet.id) }
+                    )
+                }
+            }
+            .padding(.top, 12)
+        }
+        .font(.system(size: 13, weight: .semibold))
+        .foregroundStyle(Theme.ink)
+        .padding(16)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
+    }
+
+    private var importSheet: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Import dictionary")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(Theme.ink)
+            Picker("Format", selection: $importKind) {
+                ForEach(ImportKind.allCases) { kind in Text(kind.title).tag(kind) }
+            }
+            .pickerStyle(.segmented)
+
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.ink)
                 .scrollContentBackground(.hidden)
-                .frame(minHeight: 220)
-                .padding(8)
-                .background(Theme.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
-            if !importError.isEmpty {
-                Text(importError)
-                    .font(.caption)
-                    .foregroundStyle(Theme.red)
+                .padding(10)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.line, lineWidth: 1))
+                .frame(minHeight: 230)
+
+            if !importMessage.isEmpty {
+                Text(importMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(importMessage.hasPrefix("Imported") ? Theme.success : Theme.danger)
             }
+
             HStack {
                 Spacer()
                 Button("Cancel") { showImport = false }
                     .clickableCursor()
-                Button("Import") {
-                    guard let result = importMemory() else { return }
-                    importError = "Imported \(result.inserted) items, updated \(result.updated)."
-                    showImport = false
-                }
-                .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
-                .clickableCursor()
-                .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                Button("Import") { performImport() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.brand)
+                    .clickableCursor()
+                    .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(24)
-        .frame(width: 580)
-        .background(Theme.cream)
+        .frame(width: 560, height: 420)
+        .background(Theme.surface)
     }
 
-    private var exportMenu: some View {
-        Menu {
-            Button("Copy JSON") { copyExport(.json) }
-            Button("Copy terms CSV") { copyExport(.termsCSV) }
-            Button("Copy corrections CSV") { copyExport(.replacementsCSV) }
-        } label: {
-            Image(systemName: copiedExport ? "checkmark" : "square.and.arrow.up")
-        }
-        .buttonStyle(PremiumIconButtonStyle())
-        .help("Copy Memory export")
-        .clickableCursor()
+    private func emptyEntries(_ title: String, _ detail: String) -> some View {
+        CommandEmptyState(icon: "character.book.closed", title: title, detail: detail)
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
     }
 
-    private var importMenu: some View {
-        Menu {
-            Button("Import JSON") { beginImport(.json) }
-            Button("Import terms CSV") { beginImport(.termsCSV) }
-            Button("Import corrections CSV") { beginImport(.replacementsCSV) }
-        } label: {
-            Image(systemName: "square.and.arrow.down")
-        }
-        .buttonStyle(PremiumIconButtonStyle())
-        .help("Import Memory")
-        .clickableCursor()
+    private func addWord() {
+        viewModel.addTerm(
+            phrase: word,
+            pronunciations: split(pronunciations),
+            aliases: split(aliases),
+            priority: priority,
+            language: wordLanguage,
+            notes: notes
+        )
+        word = ""
+        pronunciations = ""
+        aliases = ""
+        notes = ""
+        priority = .high
+        wordLanguage = .auto
     }
 
-    private func beginImport(_ kind: MemoryImportKind) {
-        importKind = kind
-        importText = ""
-        importError = ""
-        showImport = true
+    private func addCorrection() {
+        viewModel.addReplacement(
+            match: heard,
+            replacement: replacement,
+            mode: matchMode,
+            language: replacementLanguage
+        )
+        heard = ""
+        replacement = ""
+        matchMode = .wordBoundaryPhrase
+        replacementLanguage = .auto
     }
 
-    private func importMemory() -> LanguageMemoryImportResult? {
+    private func performImport() {
         switch importKind {
         case .json:
             guard let result = viewModel.importSnapshotJSON(importText) else {
-                importError = "Paste a valid Memory JSON export."
-                return nil
+                importMessage = "The JSON backup could not be read."
+                return
             }
-            return result
-        case .termsCSV:
-            let result = viewModel.importTermsCSV(importText)
-            if result.inserted == 0, result.updated == 0, !result.invalid.isEmpty {
-                importError = "No valid term rows found."
-                return nil
-            }
-            return result
-        case .replacementsCSV:
-            let result = viewModel.importReplacementsCSV(importText)
-            if result.inserted == 0, result.updated == 0, !result.invalid.isEmpty {
-                importError = "No valid correction rows found."
-                return nil
-            }
-            return result
+            importMessage = resultMessage(result)
+        case .wordsCSV:
+            importMessage = resultMessage(viewModel.importTermsCSV(importText))
+        case .correctionsCSV:
+            importMessage = resultMessage(viewModel.importReplacementsCSV(importText))
         }
     }
 
-    private func copyExport(_ kind: MemoryImportKind) {
-        let export: String
-        switch kind {
-        case .json:
-            export = viewModel.exportSnapshotJSON()
-        case .termsCSV:
-            export = viewModel.exportTermsCSV()
-        case .replacementsCSV:
-            export = viewModel.exportReplacementsCSV()
-        }
+    private func resultMessage(_ result: LanguageMemoryImportResult) -> String {
+        "Imported \(result.inserted) new and updated \(result.updated). \(result.duplicates) duplicates skipped."
+    }
+
+    private func split(_ value: String) -> [String] {
+        value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+    }
+
+    private func copy(_ value: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(export, forType: .string)
-        withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { copiedExport = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.2) {
-            withAnimation(.spring(response: 0.3, dampingFraction: 0.86)) { copiedExport = false }
-        }
-    }
-
-    private func split(_ text: String) -> [String] {
-        text.split(separator: ",")
-            .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-    }
-
-    private func languageTitle(_ language: MemoryLanguage) -> String {
-        switch language {
-        case .auto: return "Any"
-        case .en: return "English"
-        case .de: return "German"
-        }
-    }
-
-    private func priorityTitle(_ priority: MemoryPriority) -> String {
-        switch priority {
-        case .normal: return "Normal"
-        case .high: return "High"
-        case .always: return "Always"
-        }
+        NSPasteboard.general.setString(value, forType: .string)
     }
 }
 
-private enum MemoryMode: String, CaseIterable, Identifiable {
-    case terms, corrections, snippets, learning
-
+private enum DictionarySection: String, CaseIterable, Identifiable {
+    case words, corrections
     var id: String { rawValue }
-
-    var title: String {
-        switch self {
-        case .terms: return "Terms"
-        case .corrections: return "Corrections"
-        case .snippets: return "Snippets"
-        case .learning: return "Learning Queue"
-        }
-    }
-
-    var shortTitle: String {
-        switch self {
-        case .terms: return "Terms"
-        case .corrections: return "Fixes"
-        case .snippets: return "Snips"
-        case .learning: return "Queue"
-        }
-    }
-
-    var icon: String {
-        switch self {
-        case .terms: return "textformat"
-        case .corrections: return "arrow.left.arrow.right"
-        case .snippets: return "text.badge.plus"
-        case .learning: return "sparkles"
-        }
-    }
+    var title: String { self == .words ? "Words and names" : "Auto-corrections" }
 }
 
-private enum MemoryImportKind: String, CaseIterable, Identifiable {
-    case json, termsCSV, replacementsCSV
-
+private enum ImportKind: String, CaseIterable, Identifiable {
+    case json, wordsCSV, correctionsCSV
     var id: String { rawValue }
-
     var title: String {
         switch self {
-        case .json: return "JSON"
-        case .termsCSV: return "Terms CSV"
-        case .replacementsCSV: return "Corrections CSV"
+        case .json: return "Full backup"
+        case .wordsCSV: return "Words CSV"
+        case .correctionsCSV: return "Corrections CSV"
         }
     }
 }

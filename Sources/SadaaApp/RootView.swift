@@ -11,26 +11,26 @@ enum SidebarSection: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .home: return "Home"
-        case .languageMemory: return "Memory"
-        case .scratchpad: return "Scratchpad"
-        case .history: return "History"
+        case .home: return "Dictate"
+        case .languageMemory: return "Dictionary"
+        case .scratchpad: return "Notes"
+        case .history: return "Library"
         case .settings: return "Settings"
         }
     }
 
     var systemImage: String {
         switch self {
-        case .home: return "house"
-        case .languageMemory: return "text.book.closed"
+        case .home: return "waveform"
+        case .languageMemory: return "character.book.closed"
         case .scratchpad: return "note.text"
-        case .history: return "clock.arrow.circlepath"
+        case .history: return "text.page"
         case .settings: return "gearshape"
         }
     }
 }
 
-/// The windowed shell: a navy sidebar over a cream detail pane. Each section
+/// The windowed shell: a fixed navy sidebar and a white working canvas. Each section
 /// resolves to a dedicated page composed from the shared view model.
 struct RootView: View {
     @ObservedObject var viewModel: SadaaViewModel
@@ -44,7 +44,7 @@ struct RootView: View {
         } detail: {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Theme.cream)
+                .background(Theme.surface)
         }
         // Sadaa wears a fixed light cream/navy brand. Pin the window to the
         // light scheme so default text resolves dark and stays readable on
@@ -57,11 +57,11 @@ struct RootView: View {
     private var sidebar: some View {
         VStack(alignment: .leading, spacing: 6) {
             brand
-            Text("VOICE SYSTEM")
-                .font(.system(size: 10, weight: .semibold))
-                .foregroundStyle(Theme.gold.opacity(0.86))
+            Text("Workspace")
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(Theme.white.opacity(0.46))
                 .padding(.horizontal, 18)
-                .padding(.top, 10)
+                .padding(.top, 14)
                 .padding(.bottom, 2)
             ForEach(SidebarSection.allCases) { section in
                 Button {
@@ -80,13 +80,13 @@ struct RootView: View {
             Spacer(minLength: 0)
             footer
         }
-        .frame(minWidth: 210, maxWidth: 210, maxHeight: .infinity, alignment: .top)
+        .frame(minWidth: 196, maxWidth: 196, maxHeight: .infinity, alignment: .top)
         .background(
             Rectangle()
                 .fill(Theme.navy800)
                 .overlay(alignment: .trailing) {
                     Rectangle()
-                        .fill(Theme.gold.opacity(0.18))
+                        .fill(Theme.white.opacity(0.08))
                         .frame(width: 1)
                 }
         )
@@ -99,9 +99,9 @@ struct RootView: View {
                 Text("Sadaa")
                     .font(.system(size: 20, weight: .bold))
                     .foregroundStyle(Theme.white)
-                Text("AI Dictation")
+                Text("Voice dictation")
                     .font(.system(size: 10, weight: .medium))
-                    .foregroundStyle(Theme.cream.opacity(0.68))
+                    .foregroundStyle(Theme.white.opacity(0.58))
             }
         }
         .padding(.horizontal, 18)
@@ -113,23 +113,19 @@ struct RootView: View {
         VStack(alignment: .leading, spacing: 6) {
             HStack(spacing: 6) {
                 Circle()
-                    .fill(viewModel.hotkeyActive ? Theme.sage : Theme.gold)
+                    .fill(viewModel.hotkeyActive ? Theme.success : Theme.accent)
                     .frame(width: 7, height: 7)
                 Text(viewModel.hotkeyActive ? "Hotkeys active" : "Needs access")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundStyle(Theme.cream.opacity(0.78))
+                    .foregroundStyle(Theme.white.opacity(0.78))
             }
-            Text("Local-first voice workspace")
+            Text(viewModel.providerName)
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Theme.cream.opacity(0.48))
+                .foregroundStyle(Theme.white.opacity(0.45))
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Theme.gold.opacity(0.14), lineWidth: 1)
-        )
+        .background(Theme.white.opacity(0.055), in: RoundedRectangle(cornerRadius: 10))
         .padding(12)
     }
 
@@ -173,7 +169,6 @@ private struct BrandMark: View {
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Theme.gold.opacity(0.22), lineWidth: 1)
         )
-        .shadow(color: Theme.gold.opacity(0.14), radius: 8, y: 3)
     }
 
     private static let logoImage: NSImage? = {

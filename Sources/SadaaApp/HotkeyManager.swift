@@ -24,7 +24,7 @@ struct HotkeyOption: Identifiable, Hashable {
 
 /// System-wide key listener via CGEventTap.
 /// - Right Command tap -> onToggle (dictation)
-/// - Right Option tap -> onVoiceEdit (edit the selection)
+/// - Right Shift tap -> onLanguageSwitch
 /// - Esc while recording -> onCancel (the Esc event is consumed)
 /// Requires Accessibility trust. Spec sections 4 and 8.
 final class HotkeyManager {
@@ -34,19 +34,13 @@ final class HotkeyManager {
     /// Updatable live: the tap listens to all flagsChanged and filters here, so
     /// changing this takes effect without restarting the tap.
     var activationKeycode: Int64 = 54
-    /// The modifier key whose tap triggers voice-edit. Default Right Option (61).
-    /// Stored (not derived) so the user can pick it independently in Settings;
-    /// the Settings layer guarantees it never equals activationKeycode.
-    var voiceEditKeycode: Int64 = 61
     /// The modifier key whose tap flips the dictation language. Default Right
     /// Shift (60), the Shift key under Return, by explicit user choice. The
-    /// Settings layer keeps it distinct from the other two keys.
+    /// Settings layer keeps it distinct from the dictation key.
     var languageSwitchKeycode: Int64 = 60
 
     var onToggle: (() -> Void)?
     var onCancel: (() -> Void)?
-    /// Voice-edit key tap: voice-edit the current selection. Spec section 8.
-    var onVoiceEdit: (() -> Void)?
     /// Language key tap: flip the dictation language between English and German.
     var onLanguageSwitch: (() -> Void)?
 
@@ -68,7 +62,6 @@ final class HotkeyManager {
     // One tap recognizer per tap-key. The type is a generic modifier-tap
     // detector (its event names are historical, from the original Right Option).
     private var activationRecognizer = RightOptionTapRecognizer()
-    private var voiceEditRecognizer = RightOptionTapRecognizer()
     private var languageSwitchRecognizer = RightOptionTapRecognizer()
     private var tap: CFMachPort?
     private var runLoopSource: CFRunLoopSource?
@@ -135,12 +128,6 @@ final class HotkeyManager {
                                                   : .rightOptionUp(at: now)) {
                 DispatchQueue.main.async { [weak self] in self?.onToggle?() }
             }
-        case .flagsChanged where keycode == voiceEditKeycode:
-            let isDown = event.flags.contains(Self.flagMask(for: keycode))
-            if voiceEditRecognizer.handle(isDown ? .rightOptionDown(at: now)
-                                                 : .rightOptionUp(at: now)) {
-                DispatchQueue.main.async { [weak self] in self?.onVoiceEdit?() }
-            }
         case .flagsChanged where keycode == languageSwitchKeycode:
             let isDown = event.flags.contains(Self.flagMask(for: keycode))
             if languageSwitchRecognizer.handle(isDown ? .rightOptionDown(at: now)
@@ -155,7 +142,6 @@ final class HotkeyManager {
         case .keyDown:
             // Any other key invalidates a pending tap on every tap-key.
             _ = activationRecognizer.handle(.otherKeyDown)
-            _ = voiceEditRecognizer.handle(.otherKeyDown)
             _ = languageSwitchRecognizer.handle(.otherKeyDown)
         default:
             break

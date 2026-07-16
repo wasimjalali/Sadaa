@@ -6,47 +6,44 @@ struct MemoryTermRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 12) {
-            Image(systemName: term.priority == .always ? "star.fill" : "textformat")
-                .foregroundStyle(term.priority == .always ? Theme.gold : Theme.sage)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 4) {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "textformat")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.brand)
+                .frame(width: 24, height: 24)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 6))
+
+            VStack(alignment: .leading, spacing: 5) {
                 Text(term.phrase)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: 14, weight: .semibold))
                     .foregroundStyle(Theme.ink)
-                HStack(spacing: 6) {
-                    PremiumStatusBadge(text: priorityTitle(term.priority),
-                                       tint: term.priority == .always ? Theme.gold : Theme.navy)
-                    if term.language != .auto {
-                        PremiumStatusBadge(text: languageTitle(term.language), tint: Theme.sage)
-                    }
-                    if term.usageCount > 0 {
-                        PremiumStatusBadge(text: "\(term.usageCount)x used", tint: Theme.sage)
-                    }
-                }
-                if !term.pronunciations.isEmpty || !term.aliases.isEmpty {
-                    Text((term.pronunciations + term.aliases).joined(separator: ", "))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                        .lineLimit(2)
-                }
+                Text(metadata(for: term))
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                    .lineLimit(2)
                 if !term.notes.isEmpty {
                     Text(term.notes)
-                        .font(.system(size: 11))
+                        .font(.system(size: 12))
                         .foregroundStyle(Theme.muted)
                         .lineLimit(2)
                 }
             }
             Spacer()
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(PremiumIconButtonStyle())
-            .help("Remove term")
+            Button(action: onDelete) { Image(systemName: "trash") }
+                .buttonStyle(PremiumIconButtonStyle())
+                .help("Remove word")
         }
-        .padding(12)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+        .padding(14)
+        .background(Theme.surface)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
+    private func metadata(for term: MemoryTerm) -> String {
+        var parts = [priorityTitle(term.priority), languageTitle(term.language)]
+        if term.usageCount > 0 { parts.append("used \(term.usageCount) times") }
+        let hints = term.pronunciations + term.aliases
+        if !hints.isEmpty { parts.append(hints.joined(separator: ", ")) }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -56,45 +53,50 @@ struct ReplacementRuleRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: rule.isEnabled ? "arrow.left.arrow.right" : "pause.circle")
-                .foregroundStyle(rule.isEnabled ? Theme.sage : Theme.muted)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(rule.match)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                Text(rule.replacement)
-                    .font(.system(size: 12))
+        HStack(alignment: .center, spacing: 14) {
+            Image(systemName: rule.isEnabled ? "arrow.right" : "pause")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(rule.isEnabled ? Theme.brand : Theme.muted)
+                .frame(width: 24, height: 24)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 6))
+
+            VStack(alignment: .leading, spacing: 5) {
+                HStack(spacing: 8) {
+                    Text(rule.match)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.ink)
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 10))
+                        .foregroundStyle(Theme.muted)
+                    Text(rule.replacement)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(Theme.brand)
+                }
+                Text(replacementMetadata(rule))
+                    .font(.system(size: 11))
                     .foregroundStyle(Theme.muted)
             }
             Spacer()
-            VStack(alignment: .trailing, spacing: 6) {
-                if !rule.isEnabled {
-                    PremiumStatusBadge(text: "Paused", tint: Theme.muted)
-                }
-                PremiumStatusBadge(text: matchModeTitle(rule.matchMode), tint: Theme.navy)
-                if rule.language != .auto {
-                    PremiumStatusBadge(text: languageTitle(rule.language), tint: Theme.sage)
-                }
-                if rule.usageCount > 0 {
-                    PremiumStatusBadge(text: "\(rule.usageCount)x used", tint: Theme.sage)
-                }
-            }
             Button(action: onToggleEnabled) {
                 Image(systemName: rule.isEnabled ? "pause" : "play.fill")
             }
             .buttonStyle(PremiumIconButtonStyle())
-            .help(rule.isEnabled ? "Pause replacement" : "Resume replacement")
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(PremiumIconButtonStyle())
-            .help("Remove replacement")
+            .help(rule.isEnabled ? "Pause correction" : "Resume correction")
+            Button(action: onDelete) { Image(systemName: "trash") }
+                .buttonStyle(PremiumIconButtonStyle())
+                .help("Remove correction")
         }
-        .padding(12)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+        .opacity(rule.isEnabled ? 1 : 0.58)
+        .padding(14)
+        .background(Theme.surface)
+        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
+    }
+
+    private func replacementMetadata(_ rule: ReplacementRule) -> String {
+        var parts = [matchModeTitle(rule.matchMode), languageTitle(rule.language)]
+        if rule.usageCount > 0 { parts.append("used \(rule.usageCount) times") }
+        if !rule.isEnabled { parts.append("paused") }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -104,10 +106,7 @@ struct MemorySnippetRow: View {
     let onDelete: () -> Void
 
     var body: some View {
-        HStack(alignment: .top, spacing: 10) {
-            Image(systemName: snippet.isEnabled ? "text.badge.plus" : "pause.circle")
-                .foregroundStyle(snippet.isEnabled ? Theme.gold : Theme.muted)
-                .frame(width: 18)
+        HStack(alignment: .top, spacing: 12) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(snippet.trigger)
                     .font(.system(size: 13, weight: .semibold))
@@ -116,36 +115,38 @@ struct MemorySnippetRow: View {
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
                     .lineLimit(3)
-                if !snippet.tags.isEmpty {
-                    Text(snippet.tags.map { "#\($0)" }.joined(separator: " "))
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.sage)
-                }
-                if !snippet.isEnabled {
-                    PremiumStatusBadge(text: "Paused", tint: Theme.muted)
-                }
-                if snippet.language != .auto {
-                    PremiumStatusBadge(text: languageTitle(snippet.language), tint: Theme.sage)
-                }
-                if snippet.usageCount > 0 {
-                    PremiumStatusBadge(text: "\(snippet.usageCount)x used", tint: Theme.sage)
-                }
             }
             Spacer()
             Button(action: onToggleEnabled) {
                 Image(systemName: snippet.isEnabled ? "pause" : "play.fill")
             }
             .buttonStyle(PremiumIconButtonStyle())
-            .help(snippet.isEnabled ? "Pause snippet" : "Resume snippet")
-            Button(action: onDelete) {
-                Image(systemName: "trash")
-            }
-            .buttonStyle(PremiumIconButtonStyle())
-            .help("Remove snippet")
+            Button(action: onDelete) { Image(systemName: "trash") }
+                .buttonStyle(PremiumIconButtonStyle())
         }
-        .padding(12)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+        .opacity(snippet.isEnabled ? 1 : 0.58)
+        .padding(.vertical, 8)
+    }
+}
+
+struct MemorySuggestionRow: View {
+    let suggestion: MemorySuggestion
+    let onAccept: () -> Void
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Text(suggestion.proposed)
+                .foregroundStyle(Theme.ink)
+            Spacer()
+            Button("Dismiss", action: onDismiss)
+                .buttonStyle(.borderless)
+                .clickableCursor()
+            Button("Add", action: onAccept)
+                .buttonStyle(.bordered)
+                .tint(Theme.brand)
+                .clickableCursor()
+        }
     }
 }
 
@@ -159,61 +160,16 @@ private func languageTitle(_ language: MemoryLanguage) -> String {
 
 private func priorityTitle(_ priority: MemoryPriority) -> String {
     switch priority {
-    case .normal: return "Normal"
-    case .high: return "High"
-    case .always: return "Always"
+    case .normal: return "Normal priority"
+    case .high: return "High priority"
+    case .always: return "Always include"
     }
 }
 
 private func matchModeTitle(_ mode: ReplacementMatchMode) -> String {
     switch mode {
-    case .exactPhrase: return "Exact"
+    case .exactPhrase: return "Exact phrase"
     case .caseInsensitivePhrase: return "Case-insensitive"
     case .wordBoundaryPhrase: return "Word boundary"
-    }
-}
-
-struct MemorySuggestionRow: View {
-    let suggestion: MemorySuggestion
-    let onAccept: () -> Void
-    let onDismiss: () -> Void
-
-    var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "sparkles")
-                .foregroundStyle(Theme.gold)
-                .frame(width: 18)
-            VStack(alignment: .leading, spacing: 3) {
-                Text(suggestion.proposed)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                Text("\(suggestion.evidenceCount) signals from \(sourceTitle(suggestion.source))")
-                    .font(.system(size: 11))
-                    .foregroundStyle(Theme.muted)
-            }
-            Spacer()
-            Button(action: onAccept) {
-                Image(systemName: "checkmark")
-            }
-            .buttonStyle(PremiumIconButtonStyle())
-            .help("Accept suggestion")
-            Button(action: onDismiss) {
-                Image(systemName: "xmark")
-            }
-            .buttonStyle(PremiumIconButtonStyle())
-            .help("Dismiss suggestion")
-        }
-        .padding(12)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
-    }
-}
-
-private func sourceTitle(_ source: MemorySuggestionSource) -> String {
-    switch source {
-    case .formatter: return "formatter"
-    case .historyCorrection: return "history"
-    case .manualImport: return "import"
-    case .reprocess: return "reprocess"
     }
 }

@@ -7,27 +7,27 @@ import SadaaCore
 final class SadaaViewModel: ObservableObject {
     @Published var dictationState: DictationState = .idle
     @Published var recent: [DictationRecord] = []
-    @Published var azureConfigured: Bool = false
+    @Published var providerConfigured: Bool = false
+    @Published var providerName: String = "Azure OpenAI"
     @Published var languagePin: LanguagePin = .auto
     @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
     @Published var hotkeyKeycode: Int = 54
-    @Published var voiceEditKeycode: Int = 61
     @Published var languageSwitchKeycode: Int = 60
     /// A failed dictation whose audio is retained and can be retried.
     @Published var canRetry: Bool = false
 
     /// Set by the app layer to push a new activation key to the live HotkeyManager.
     var onHotkeyKeycodeChange: ((Int) -> Void)?
-    /// Set by the app layer to push a new voice-edit key to the live HotkeyManager.
-    var onVoiceEditKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to push a new language-switch key to the live HotkeyManager.
     var onLanguageSwitchKeycodeChange: ((Int) -> Void)?
     /// Set by the app layer to retry the last failed dictation on its audio.
     var onRetry: (() -> Void)?
     /// Set by the app layer to re-run a history item from retained audio when possible.
     var onReprocessHistory: ((DictationRecord) -> Void)?
+    /// Applies recording settings to the live controller without requiring a relaunch.
+    var onRecordingSettingsChange: ((TimeInterval, Int) -> Void)?
 
     private let settings: AppSettings
     private let history: DictationHistory
@@ -69,63 +69,56 @@ final class SadaaViewModel: ObservableObject {
         // blocking keychain authorization prompt that freezes the app, and with
         // it the HUD. An existence check is all "configured?" needs and never
         // prompts. See Keychain.exists.
-        azureConfigured =
-            !settings.azureEndpoint.isEmpty &&
-            !settings.azureDeployment.isEmpty &&
-            Keychain.exists(account: "azure-openai-key")
+        switch settings.speechProviderKind {
+        case .azureOpenAI:
+            providerName = "Azure OpenAI"
+            providerConfigured =
+                !settings.azureEndpoint.isEmpty &&
+                !settings.azureDeployment.isEmpty &&
+                Keychain.exists(account: "azure-openai-key")
+        case .openAICompatible:
+            providerName = "OpenAI-compatible"
+            providerConfigured =
+                URL(string: settings.compatibleEndpoint) != nil &&
+                !settings.compatibleModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
         languagePin = settings.languagePin
         hotkeyKeycode = settings.hotkeyKeycode
-        voiceEditKeycode = settings.voiceEditKeycode
         languageSwitchKeycode = settings.languageSwitchKeycode
+        onRecordingSettingsChange?(settings.silenceTimeout, settings.recordingsToKeep)
     }
 
-    // The three tap-keys (dictation, voice-edit, language-switch) must always be
-    // pairwise distinct: one CGEvent tap can't disambiguate two keys bound to the
-    // same keycode. Each setter below swaps the colliding key to the value this
-    // key just freed, which is guaranteed distinct from both the new value and
-    // the untouched third key, so the invariant holds after every change.
-
-    private func applyHotkey(_ code: Int) {
-        settings.hotkeyKeycode = code
-        hotkeyKeycode = code
-        onHotkeyKeycodeChange?(code)
-    }
-
-    private func applyVoiceEdit(_ code: Int) {
-        settings.voiceEditKeycode = code
-        voiceEditKeycode = code
-        onVoiceEditKeycodeChange?(code)
-    }
-
-    private func applyLanguageSwitch(_ code: Int) {
-        settings.languageSwitchKeycode = code
-        languageSwitchKeycode = code
-        onLanguageSwitchKeycodeChange?(code)
-    }
-
-    /// Sets the dictation key, swapping whichever other key collides onto this
-    /// key's previous value so all three stay distinct.
+    /// Sets the dictation key and swaps the language key when they collide.
     func setHotkeyKeycode(_ code: Int) {
-        let freed = hotkeyKeycode
-        if code == voiceEditKeycode { applyVoiceEdit(freed) }
-        else if code == languageSwitchKeycode { applyLanguageSwitch(freed) }
-        applyHotkey(code)
+        var assignment = HotkeyAssignment(
+            dictation: hotkeyKeycode,
+            languageSwitch: languageSwitchKeycode
+        )
+        assignment.setDictation(code)
+        apply(assignment)
     }
 
-    /// Sets the voice-edit key, swapping the colliding key out of the way.
-    func setVoiceEditKeycode(_ code: Int) {
-        let freed = voiceEditKeycode
-        if code == hotkeyKeycode { applyHotkey(freed) }
-        else if code == languageSwitchKeycode { applyLanguageSwitch(freed) }
-        applyVoiceEdit(code)
-    }
-
-    /// Sets the language-switch key, swapping the colliding key out of the way.
+    /// Sets the language-switch key and swaps the dictation key on collision.
     func setLanguageSwitchKeycode(_ code: Int) {
-        let freed = languageSwitchKeycode
-        if code == hotkeyKeycode { applyHotkey(freed) }
-        else if code == voiceEditKeycode { applyVoiceEdit(freed) }
-        applyLanguageSwitch(code)
+        var assignment = HotkeyAssignment(
+            dictation: hotkeyKeycode,
+            languageSwitch: languageSwitchKeycode
+        )
+        assignment.setLanguageSwitch(code)
+        apply(assignment)
+    }
+
+    private func apply(_ assignment: HotkeyAssignment) {
+        if hotkeyKeycode != assignment.dictation {
+            settings.hotkeyKeycode = assignment.dictation
+            hotkeyKeycode = assignment.dictation
+            onHotkeyKeycodeChange?(assignment.dictation)
+        }
+        if languageSwitchKeycode != assignment.languageSwitch {
+            settings.languageSwitchKeycode = assignment.languageSwitch
+            languageSwitchKeycode = assignment.languageSwitch
+            onLanguageSwitchKeycodeChange?(assignment.languageSwitch)
+        }
     }
 
     func refreshLanguageMemory() {

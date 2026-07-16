@@ -6,9 +6,9 @@
 [![Swift](https://img.shields.io/badge/Swift-F05138?logo=swift&logoColor=white)](https://swift.org)
 ![Platform](https://img.shields.io/badge/platform-macOS%2014%2B-lightgrey)
 
-A fast, personal voice-dictation app for macOS. Tap a hotkey anywhere, speak in English or German, and the transcript lands at your cursor. Built to use your Azure OpenAI whisper deployment (the thing OpenWhispr and friends can't do).
+A fast, personal voice-dictation app for macOS. Tap a hotkey anywhere, speak in English or German, and the transcript lands at your cursor. Connect Azure OpenAI or a standard OpenAI-compatible Whisper endpoint.
 
-This is now the premium local-first Sadaa build: record, transcribe through Azure-hosted models, clean the text, apply personal Language Memory, and insert at your cursor with a clipboard backup. The main window is a control center for readiness, Language Memory, Scratchpad notes, history, provider setup, and diagnostics.
+Sadaa records, transcribes, applies your personal dictionary and inserts the result at your cursor with a clipboard backup. The main window focuses on five clear areas: Dictate, Library, Dictionary, Notes and Settings.
 
 ## Build and run
 
@@ -25,36 +25,35 @@ Requirements: macOS 14+, Apple Silicon, Command Line Tools (no full Xcode needed
 
 1. **Microphone**: grant it when macOS prompts (or System Settings > Privacy & Security > Microphone).
 2. **Accessibility**: System Settings > Privacy & Security > Accessibility, enable Sadaa. This powers the tap hotkeys AND inserting text at your cursor. The app polls for this, so once you grant it the hotkey starts working without a relaunch (no need to quit and reopen).
-3. **Azure**: menu bar icon > Settings, fill in:
-   - Endpoint, e.g. `https://your-resource.openai.azure.com`
-   - Transcription deployment name
-   - API version (defaults to `2025-03-01-preview`)
-   - API key (stored in the macOS Keychain, never in a file)
+3. **Speech provider**: open Settings and choose one connection:
+   - **Azure OpenAI**: endpoint, transcription deployment, API version and API key.
+   - **OpenAI-compatible**: base URL, model and an optional bearer token. Sadaa calls the standard `/v1/audio/transcriptions` endpoint, including local or self-hosted Whisper services.
 
-Until Azure is configured, every dictation ends with the HUD saying "No transcription provider configured."
-Use **Test Azure** in Settings to run a tiny redacted transcription probe against the current deployment before you rely on it.
+API keys and tokens are stored in the macOS Keychain, never in a file.
+
+Until a speech provider is configured, every dictation ends with the HUD saying "No transcription provider configured."
+Use **Test connection** in Settings to run a tiny redacted transcription probe before you rely on it.
 
 ## Using it
 
 - **Tap your dictation key** to start recording (Right Command by default; a gold pill appears at the bottom of the screen). Tap again to stop, transcribe and insert.
-- **Tap your voice-edit key** to rewrite selected text by voice (Right Option by default).
 - **Esc** while recording cancels.
 - Recording auto-stops after 60s of silence or 10 minutes total.
 - Pick **Auto-detect / English / German** in the menu bar.
 - The final text is always copied to the clipboard as a backup, so if insertion misses you can paste it.
-- Teach Sadaa names, product terms, pronunciations, deterministic replacements with live preview, and spoken snippets in **Language Memory**, with per-term priority and English/German/Any-language targeting. Replacements and snippets can be paused instead of deleted. Snippets expand deterministically around smart formatting, and raw-mode dictation still applies local deterministic memory without calling GPT. History rows show memory/snippet-hit counts so you can tell when Sadaa actually matched your memory, and matched terms/replacements/snippets gain usage counts that improve future biasing. Copy or import Language Memory JSON, terms CSV, or replacements CSV for local backup/migration.
-- Use **Scratchpad** for local dictated notes with search, pins, auto-save, tags, word/character stats, selected-note Markdown copy, all-notes Markdown export, JSON backup/restore, and append-latest-dictation.
-- In **History**, copy, send a dictation to Scratchpad, reprocess from retained audio when available, or turn a correction into a term/replacement.
+- Teach Sadaa exact names and specialist spellings in **Dictionary**, and add deterministic auto-corrections for recurring mistakes. Advanced spelling hints, text shortcuts and import/export stay available without cluttering the default workflow.
+- Use **Notes** for local dictated notes with search, pins, auto-save, tags, Markdown copy, JSON backup/restore and append-latest-dictation.
+- In **Library**, search, copy, send a dictation to Notes, reprocess retained audio or turn a correction into a dictionary entry.
 
-## Recommended Azure models
+## Recommended models
 
-Use Azure OpenAI / Foundry deployments when available:
+For Azure OpenAI / Foundry deployments:
 
 - **Fast daily dictation**: your Azure deployment of `gpt-4o-mini-transcribe`, or the newest mini transcribe variant available in your region
 - **Best accuracy**: your Azure deployment of `gpt-4o-transcribe`
 - **Realtime models**: useful for future streaming/live transcription work, but not the current Sadaa hotkey flow, which records an utterance and submits it through the file-based audio transcription path
 
-Smart formatting should use a chat deployment such as `gpt-4o-mini` for low-latency cleanup. API keys remain in Keychain. Local app data stays under Sadaa's Application Support directory; Sadaa does not read, scan, index, or default-save into your Documents folder.
+For OpenAI-compatible endpoints, enter the model name expected by your service. Smart formatting currently uses an optional Azure chat deployment such as `gpt-4o-mini`; dictionary corrections continue to run locally when cleanup is off. Local app data stays under Sadaa's Application Support directory; Sadaa does not read, scan, index, or default-save into your Documents folder.
 
 ## Develop
 

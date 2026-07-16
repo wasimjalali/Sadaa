@@ -13,6 +13,11 @@ public protocol AudioRecording: AnyObject {
     /// prompt bias (the dictionary) back as a fake transcript. Valid to read
     /// after stop().
     var didCaptureSpeech: Bool { get }
+    func updateSilenceTimeout(_ timeout: TimeInterval)
+}
+
+public extension AudioRecording {
+    func updateSilenceTimeout(_ timeout: TimeInterval) {}
 }
 
 public enum AudioRecorderError: Error {
@@ -40,7 +45,7 @@ public final class AudioRecorder: AudioRecording {
     /// single AVAudioEngine tap thread (after start() assigns state before the
     /// tap is installed), so no synchronization is needed.
     private var autoStopFired = false
-    private let silenceTimeout: TimeInterval
+    private var silenceTimeout: TimeInterval
     /// Hard cap on recording length. Spec section 8: 10 minutes.
     private let maxDuration: TimeInterval
     /// Peak absolute sample at or above which a buffer counts as containing
@@ -73,6 +78,10 @@ public final class AudioRecorder: AudioRecording {
         self.silenceTimeout = silenceTimeout
         self.maxDuration = maxDuration
         self.watchdog = SilenceWatchdog(timeout: silenceTimeout)
+    }
+
+    public func updateSilenceTimeout(_ timeout: TimeInterval) {
+        silenceTimeout = timeout
     }
 
     public func start(to url: URL) throws {

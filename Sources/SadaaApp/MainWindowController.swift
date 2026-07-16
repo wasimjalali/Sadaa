@@ -16,8 +16,8 @@ final class MainWindowController: NSObject, NSWindowDelegate {
             let window = NSWindow(contentViewController: hosting)
             window.title = "Sadaa"
             window.styleMask = [.titled, .closable, .miniaturizable, .resizable]
-            window.setContentSize(NSSize(width: 900, height: 600))
-            window.minSize = NSSize(width: 820, height: 560)
+            window.setContentSize(NSSize(width: 1040, height: 700))
+            window.minSize = NSSize(width: 840, height: 580)
             window.isReleasedWhenClosed = false
             window.delegate = self
             window.center()
