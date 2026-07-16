@@ -21,7 +21,7 @@ public final class DictationController {
     private let providers: () -> [TranscriptionProvider]
     private let store: RecordingStore
     private let hint: () -> TranscriptionHint
-    private let recordingsToKeep: Int
+    private(set) var recordingsToKeep: Int
     /// Delivers the final text and calls the completion once delivery has fully
     /// settled (paste verified, clipboard restored). The controller stays in
     /// .delivering until then, so the busy mutex covers the whole delivery
@@ -139,6 +139,11 @@ public final class DictationController {
         guard state == .recording else { return }
         recorder.cancel()
         state = .idle
+    }
+
+    public func updateRecordingSettings(silenceTimeout: TimeInterval, recordingsToKeep: Int) {
+        recorder.updateSilenceTimeout(silenceTimeout)
+        self.recordingsToKeep = recordingsToKeep
     }
 
     private func startRecording() {

@@ -22,7 +22,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var languageMemory: LanguageMemoryStore?
     private var scratchpad: ScratchpadStore?
     private var controller: DictationController?
-    private var voiceEditController: VoiceEditController?
     private var recordingTimer: Timer?
     /// When the current recording began, so the pill can show elapsed mm:ss.
     private var recordingStartedAt: Date?
@@ -44,32 +43,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         default: return false
         }
     }
-    /// A voice edit is mid-flight (recording or rewriting).
-    private var isVoiceEditBusy: Bool {
-        switch voiceEditController?.state {
-        case .recording, .rewriting: return true
-        default: return false
-        }
-    }
-
-    /// Every way to start a dictation funnels through here, so the voice-edit
-    /// mutex holds for the hotkey, the menu item, the mic button AND retry.
-    /// Two live recorders would fight over the mic, the shared recording timer
-    /// and the status icon.
-    private func toggleDictation(rawMode: Bool = false) {
-        guard !isVoiceEditBusy else {
-            hud.show(.error("Finish the voice edit first."))
-            hud.hide(after: 3)
-            return
-        }
-        controller?.toggle(rawMode: rawMode)
+    private func toggleDictation() {
+        controller?.toggle()
     }
 
     /// Flips the dictation language between English and German and flashes the
-    /// new language in the HUD. Ignored while a dictation or voice edit is in
-    /// flight, so the language never changes out from under an active recording.
+    /// new language in the HUD. Ignored while dictation is in flight so the
+    /// language never changes out from under an active recording.
     private func switchLanguage() {
-        guard !isDictationBusy, !isVoiceEditBusy else { return }
+        guard !isDictationBusy else { return }
         let next = settings.languagePin.quickToggled
         settings.languagePin = next
         viewModel?.refreshConfig()   // keep Home + Settings in sync
@@ -288,86 +270,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             self?.viewModel?.canRetry = self?.controller?.canRetry ?? false
         }
         viewModel.onRetry = { [weak self] in
-            guard let self else { return }
-            // Same mutex as starting a dictation: retry transcribes and delivers.
-            guard !self.isVoiceEditBusy else {
-                self.hud.show(.error("Finish the voice edit first."))
-                self.hud.hide(after: 3)
-                return
-            }
-            self.controller?.retryLast()
+            self?.controller?.retryLast()
         }
         viewModel.onReprocessHistory = { [weak self] record in
             self?.reprocessHistory(record)
         }
+        viewModel.onRecordingSettingsChange = { [weak controller] silenceTimeout, recordingsToKeep in
+            controller?.updateRecordingSettings(
+                silenceTimeout: silenceTimeout,
+                recordingsToKeep: recordingsToKeep
+            )
+        }
         self.controller = controller
-
-        // Voice edit gets its own recordings folder so its retention never
-        // competes with dictation's.
-        let voiceEditStore = (try? RecordingStore(
-            directory: sadaaDir.appendingPathComponent("VoiceEditRecordings"))) ?? store
-        setUpVoiceEdit(store: voiceEditStore, languageMemory: languageMemory)
-    }
-
-    /// Voice edit gets its own recorder so it never fights the dictation flow.
-    /// The formatter is resolved per use so configuring GPT later works without
-    /// a relaunch; the rewrite throws a clear error when it is not configured.
-    private func setUpVoiceEdit(store: RecordingStore,
-                                languageMemory: LanguageMemoryStore) {
-        let recorder = AudioRecorder(silenceTimeout: settings.silenceTimeout)
-        // Feed the HUD's live level meter, same as dictation, so the pill
-        // animates while a voice edit is recording.
-        recorder.onLevel = { [weak self] level in
-            DispatchQueue.main.async { self?.currentLevel = level }
-        }
-        let controller = VoiceEditController(
-            recorder: recorder,
-            providers: { [settings] in Self.buildProviders(settings: settings) },
-            store: store,
-            hint: { [settings, languageMemory] in
-                let memory = languageMemory.snapshot()
-                return TranscriptionHint(languagePin: settings.languagePin,
-                                  dictionaryWords: MemoryBiasBuilder.biasList(
-                                    terms: memory.terms,
-                                    baseVocabulary: BaseVocabulary.terms,
-                                    budget: 50,
-                                    language: MemoryLanguage(languagePin: settings.languagePin)))
-            },
-            readSelection: { Self.readSelection() },
-            rewrite: { [settings, languageMemory] selection, instruction in
-                guard let formatter = Self.buildFormatter(settings: settings) else {
-                    throw ProviderError.notConfigured(
-                        "Set a GPT deployment in Settings to use voice edit.")
-                }
-                let memory = languageMemory.snapshot()
-                let context = FormattingContext(
-                    appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-                    dictionaryWords: MemoryBiasBuilder.biasList(
-                        terms: memory.terms,
-                        baseVocabulary: BaseVocabulary.terms,
-                        budget: 50,
-                        language: MemoryLanguage(languagePin: settings.languagePin)),
-                    speakerContext: settings.speakerContext,
-                    language: settings.languagePin,
-                    snippets: Self.snippets(from: memory),
-                    replacementRules: memory.replacements)
-                return try await formatter.rewrite(selection: selection,
-                                                   instruction: instruction,
-                                                   context: context)
-            },
-            replace: { [weak self] edited in
-                self?.hud.show(.replacing)
-                self?.inserter.deliver(edited) { outcome in
-                    if outcome == .clipboardOnly {
-                        self?.hud.show(.error("Copied. Press Cmd-V to paste."))
-                        self?.hud.hide(after: 4)
-                    }
-                }
-            })
-        controller.onStateChange = { [weak self] state in
-            self?.renderVoiceEdit(state)
-        }
-        self.voiceEditController = controller
     }
 
     private func reprocessHistory(_ record: DictationRecord) {
@@ -534,99 +448,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .map { Snippet(id: $0.id, trigger: $0.trigger, expansion: $0.expansion) }
     }
 
-    /// Reads the current selection: Accessibility first, then a Cmd-C fallback
-    /// for the apps where AX returns nothing (Terminal, VS Code, browsers).
-    private static func readSelection() -> String? {
-        if let viaAX = readSelectionViaAX() { return viaAX }
-        return readSelectionViaCopy()
-    }
-
-    private static func readSelectionViaAX() -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-        let systemWide = AXUIElementCreateSystemWide()
-        var focusedRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-                systemWide, kAXFocusedUIElementAttribute as CFString, &focusedRef) == .success,
-              let focusedRef,
-              CFGetTypeID(focusedRef) == AXUIElementGetTypeID() else { return nil }
-        let element = focusedRef as! AXUIElement
-        var selRef: CFTypeRef?
-        guard AXUIElementCopyAttributeValue(
-                element, kAXSelectedTextAttribute as CFString, &selRef) == .success,
-              let text = selRef as? String, !text.isEmpty else { return nil }
-        return text
-    }
-
-    /// Copies the selection via a synthetic Cmd-C and reads it back, restoring
-    /// the user's clipboard afterwards. The brief bounded wait runs on the
-    /// user-initiated voice-edit start, not on any audio path.
-    private static func readSelectionViaCopy() -> String? {
-        guard AXIsProcessTrusted() else { return nil }
-        let pasteboard = NSPasteboard.general
-        let saved = Clipboard.snapshot(pasteboard)
-
-        // Wait for the trigger key to fully release before synthesizing Cmd-C.
-        // While Right Option (or any non-command modifier) is still down, the
-        // combined session state merges it and Cmd-C becomes Cmd-Option-C,
-        // which copies nothing. This is what broke voice-edit in Slack and
-        // other Electron/browser apps, where AX gives no selection so the copy
-        // fallback is the only path. A fixed delay was a guess; poll the live
-        // modifier flags instead so it works no matter how long the key is held.
-        waitForTriggerModifiersToClear(timeout: 0.5)
-
-        let before = pasteboard.changeCount
-        guard let source = CGEventSource(stateID: .combinedSessionState),
-              let down = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: true),  // C
-              let up = CGEvent(keyboardEventSource: source, virtualKey: 8, keyDown: false)
-        else { return nil }
-        down.flags = .maskCommand
-        up.flags = .maskCommand
-        down.post(tap: .cghidEventTap)
-        up.post(tap: .cghidEventTap)
-
-        // Wait up to 800ms for the copy to land; some apps (Slack, other
-        // Electron, browsers) are slow. The loop breaks as soon as the clipboard
-        // changes, so the ceiling only costs time when a copy genuinely fails.
-        var copied: String?
-        let deadline = Date().addingTimeInterval(0.8)
-        while Date() < deadline {
-            if pasteboard.changeCount != before {
-                copied = pasteboard.string(forType: .string)
-                if copied != nil { break }
-            }
-            usleep(10_000)   // 10ms
-        }
-        Clipboard.restore(saved, to: pasteboard)
-        let trimmed = copied?.trimmingCharacters(in: .whitespacesAndNewlines)
-        return (trimmed?.isEmpty == false) ? copied : nil
-    }
-
-    /// Blocks until every modifier that could contaminate a synthetic Cmd-C is
-    /// released, or the timeout elapses. We tolerate Command (we set it
-    /// ourselves) but Option, Control, Shift and Fn would each turn Cmd-C into a
-    /// different shortcut that copies nothing. Returns immediately once clear.
-    private static func waitForTriggerModifiersToClear(timeout: TimeInterval) {
-        let contaminating: CGEventFlags =
-            [.maskAlternate, .maskControl, .maskShift, .maskSecondaryFn]
-        let deadline = Date().addingTimeInterval(timeout)
-        while Date() < deadline {
-            let flags = CGEventSource.flagsState(.combinedSessionState)
-            if flags.intersection(contaminating).isEmpty { return }
-            usleep(10_000)   // 10ms
-        }
-    }
-
     /// Active transcription provider for the focused local build.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        if let endpoint = URL(string: settings.azureEndpoint),
-           !settings.azureEndpoint.isEmpty,
-           !settings.azureDeployment.isEmpty,
-           let key = Keychain.get(account: "azure-openai-key") {
-            return [AzureOpenAIProvider(config: .init(
-                endpoint: endpoint, apiKey: key,
-                deployment: settings.azureDeployment,
-                apiVersion: settings.azureAPIVersion))]
+        switch settings.speechProviderKind {
+        case .azureOpenAI:
+            if let endpoint = URL(string: settings.azureEndpoint),
+               !settings.azureEndpoint.isEmpty,
+               !settings.azureDeployment.isEmpty,
+               let key = Keychain.get(account: "azure-openai-key") {
+                return [AzureOpenAIProvider(config: .init(
+                    endpoint: endpoint, apiKey: key,
+                    deployment: settings.azureDeployment,
+                    apiVersion: settings.azureAPIVersion))]
+            }
+        case .openAICompatible:
+            if let endpoint = URL(string: settings.compatibleEndpoint),
+               !settings.compatibleModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return [OpenAICompatibleProvider(config: .init(
+                    baseURL: endpoint,
+                    apiKey: Keychain.get(account: "openai-compatible-key") ?? "",
+                    model: settings.compatibleModel
+                ))]
+            }
         }
 
         return []
@@ -651,7 +495,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private static func describeProviderError(_ error: ProviderError) -> String {
         switch error {
         case .http(let status, let body):
-            let detail = body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)
+            let detail = ProviderHealthCheck.sanitize(
+                body.trimmingCharacters(in: .whitespacesAndNewlines)
+            ).prefix(200)
             return detail.isEmpty ? "HTTP \(status) from provider"
                                   : "HTTP \(status): \(detail)"
         case .badResponse:
@@ -671,12 +517,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     private func startHotkeys() {
         hotkeys.activationKeycode = Int64(settings.hotkeyKeycode)
-        hotkeys.voiceEditKeycode = Int64(settings.voiceEditKeycode)
         viewModel?.onHotkeyKeycodeChange = { [weak self] code in
             self?.hotkeys.activationKeycode = Int64(code)
-        }
-        viewModel?.onVoiceEditKeycodeChange = { [weak self] code in
-            self?.hotkeys.voiceEditKeycode = Int64(code)
         }
         hotkeys.languageSwitchKeycode = Int64(settings.languageSwitchKeycode)
         viewModel?.onLanguageSwitchKeycodeChange = { [weak self] code in
@@ -684,35 +526,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
         hotkeys.onLanguageSwitch = { [weak self] in self?.switchLanguage() }
         hotkeys.onToggle = { [weak self] in
-            guard let self else { return }
-            self.toggleDictation(rawMode: NSEvent.modifierFlags.contains(.shift))
+            self?.toggleDictation()
         }
         hotkeys.onCancel = { [weak self] in
-            // Route Esc to whichever flow is actually recording.
             if self?.controller?.state == .recording {
                 self?.controller?.cancel()
-            } else if self?.voiceEditController?.state == .recording {
-                self?.voiceEditController?.cancel()
             }
-        }
-        hotkeys.onVoiceEdit = { [weak self] in
-            guard let self else { return }
-            // Don't start a voice edit while a dictation is mid-flight.
-            guard !self.isDictationBusy else {
-                self.hud.show(.error("Finish dictating first."))
-                self.hud.hide(after: 3)
-                return
-            }
-            guard Self.buildFormatter(settings: self.settings) != nil else {
-                self.hud.show(.error("Set a GPT deployment in Settings to use voice edit."))
-                self.hud.hide(after: 5)
-                return
-            }
-            self.voiceEditController?.toggle()
         }
         hotkeys.isRecordingActive = { [weak self] in
             self?.controller?.state == .recording
-                || self?.voiceEditController?.state == .recording
         }
 
         // Gate on real trust first. CGEvent.tapCreate returns a non-nil but
@@ -792,31 +614,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         }
     }
 
-    private func renderVoiceEdit(_ state: VoiceEditState) {
-        switch state {
-        case .idle:
-            stopRecordingTimer()
-            setIcon("waveform", tint: nil)
-            hud.hide(after: 0.4)
-        case .recording:
-            chimes.playStart()
-            setIcon("pencil", tint: .systemRed)
-            // Same ticking timer as dictation: the pill shows the running
-            // seconds and the live audio level so you can see it is recording.
-            startVoiceEditRecordingTimer()
-        case .rewriting:
-            chimes.playStop()
-            stopRecordingTimer()
-            setIcon("waveform", tint: .systemOrange)
-            hud.show(.voiceEditRewriting)
-        case .error(let message):
-            stopRecordingTimer()
-            setIcon("waveform", tint: nil)
-            hud.show(.error(message))
-            hud.hide(after: 6)
-        }
-    }
-
     private func startRecordingTimer() {
         recordingStartedAt = Date()
         hud.show(.recording(seconds: 0, level: 0))
@@ -830,19 +627,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 guard let self else { return }
                 let elapsed = Int(Date().timeIntervalSince(self.recordingStartedAt ?? Date()))
                 self.hud.show(.recording(seconds: elapsed, level: self.currentLevel))
-            }
-        }
-    }
-
-    private func startVoiceEditRecordingTimer() {
-        recordingStartedAt = Date()
-        hud.show(.voiceEditRecording(seconds: 0, level: 0))
-        recordingTimer = Timer.scheduledTimer(withTimeInterval: 1.0 / 30.0,
-                                              repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated {
-                guard let self else { return }
-                let elapsed = Int(Date().timeIntervalSince(self.recordingStartedAt ?? Date()))
-                self.hud.show(.voiceEditRecording(seconds: elapsed, level: self.currentLevel))
             }
         }
     }

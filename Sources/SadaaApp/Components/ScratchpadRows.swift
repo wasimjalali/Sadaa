@@ -17,7 +17,7 @@ struct ScratchpadNoteRow: View {
                     }
                     Text(note.title)
                         .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(isSelected ? Theme.navy : Theme.ink)
+                        .foregroundStyle(Theme.ink)
                         .lineLimit(1)
                 }
                 Text(note.body.isEmpty ? "Empty note" : note.body)
@@ -32,18 +32,18 @@ struct ScratchpadNoteRow: View {
                     }
                 }
                 .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(Theme.sage)
+                .foregroundStyle(Theme.muted)
                 .lineLimit(1)
             }
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(isSelected ? Theme.gold.opacity(0.14) : Theme.white)
+                    .fill(isSelected ? Theme.surface : Color.clear)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected ? Theme.gold.opacity(0.55) : Theme.line,
+                    .strokeBorder(isSelected ? Theme.line : Color.clear,
                                   lineWidth: 1)
             )
         }

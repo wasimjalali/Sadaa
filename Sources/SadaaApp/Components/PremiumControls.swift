@@ -3,12 +3,13 @@ import SwiftUI
 
 private struct ClickableCursorModifier: ViewModifier {
     let enabled: Bool
+    @Environment(\.isEnabled) private var isEnabled
     @State private var cursorPushed = false
 
     func body(content: Content) -> some View {
         content
             .onHover { inside in
-                guard enabled else {
+                guard enabled, isEnabled else {
                     popIfNeeded()
                     return
                 }
@@ -43,8 +44,8 @@ extension View {
             .foregroundStyle(Theme.ink)
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
-            .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Theme.line, lineWidth: 1))
+            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 9))
+            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.line, lineWidth: 1))
     }
 }
 
@@ -72,8 +73,7 @@ struct PremiumStatusBadge: View {
         .foregroundStyle(tint)
         .padding(.horizontal, 9)
         .padding(.vertical, 5)
-        .background(Capsule().fill(tint.opacity(0.12)))
-        .overlay(Capsule().strokeBorder(tint.opacity(0.28), lineWidth: 1))
+        .background(RoundedRectangle(cornerRadius: 6).fill(tint.opacity(0.08)))
     }
 }
 
@@ -103,8 +103,8 @@ private struct PremiumIconButtonBody: View {
             .scaleEffect(configuration.isPressed ? 0.96 : 1)
             .onHover { hovering = $0 }
             .clickableCursor()
-            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: hovering)
-            .animation(.spring(response: 0.25, dampingFraction: 0.85), value: configuration.isPressed)
+            .animation(.easeOut(duration: 0.14), value: hovering)
+            .animation(.easeOut(duration: 0.14), value: configuration.isPressed)
     }
 }
 
@@ -134,13 +134,14 @@ struct PremiumSearchField: View {
         }
         .padding(.horizontal, 11)
         .padding(.vertical, 8)
-        .background(Theme.creamSurface, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 9))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(focused ? Theme.gold.opacity(0.7) : Theme.gold.opacity(0.18),
-                              lineWidth: focused ? 1.5 : 1)
+                .strokeBorder(focused ? Theme.accent : Theme.line,
+                              lineWidth: 1)
         )
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: focused)
+        .shadow(color: focused ? Theme.accent.opacity(0.12) : .clear, radius: 0, x: 0, y: 0)
+        .animation(.easeOut(duration: 0.16), value: focused)
     }
 }
 
@@ -170,10 +171,10 @@ struct PremiumSection<Content: View>: View {
             content
         }
         .padding(14)
-        .background(Theme.creamSurface, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Theme.gold.opacity(0.18), lineWidth: 1)
+                .strokeBorder(Theme.line, lineWidth: 1)
         )
     }
 }
@@ -195,25 +196,33 @@ struct CommandPageHeader<Accessory: View>: View {
     }
 
     var body: some View {
-        HStack(alignment: .top, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                if let eyebrow {
-                    Text(eyebrow.uppercased())
-                        .font(.system(size: 10, weight: .semibold))
-                        .foregroundStyle(Theme.gold)
-                }
-                Text(title)
-                    .font(.system(size: 26, weight: .bold))
-                    .foregroundStyle(Theme.ink)
-                Text(subtitle)
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(Theme.muted)
-                    .fixedSize(horizontal: false, vertical: true)
+        ViewThatFits(in: .horizontal) {
+            HStack(alignment: .top, spacing: 18) {
+                titleBlock
+                Spacer(minLength: 12)
+                accessory
+                    .fixedSize(horizontal: true, vertical: false)
             }
-            Spacer(minLength: 12)
-            accessory
+
+            VStack(alignment: .leading, spacing: 14) {
+                titleBlock
+                accessory
+                    .fixedSize(horizontal: true, vertical: false)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(title)
+                .font(.system(size: 28, weight: .bold))
+                .foregroundStyle(Theme.ink)
+            Text(subtitle)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(Theme.muted)
+                .fixedSize(horizontal: false, vertical: true)
+        }
     }
 }
 
@@ -257,13 +266,12 @@ struct CommandPanel<Content: View>: View {
             }
             content
         }
-        .padding(16)
-        .background(Theme.white, in: RoundedRectangle(cornerRadius: 8))
+        .padding(18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
+            RoundedRectangle(cornerRadius: 12)
                 .strokeBorder(Theme.line, lineWidth: 1)
         )
-        .shadow(color: Theme.navy.opacity(0.045), radius: 14, y: 8)
     }
 }
 
@@ -295,7 +303,7 @@ struct CommandMetric: View {
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
         .overlay(
             RoundedRectangle(cornerRadius: 8)
                 .strokeBorder(Theme.line, lineWidth: 1)

@@ -14,6 +14,7 @@ final class FakeRecorder: AudioRecording {
     /// Whether the fake recording "heard" speech. Defaults true so normal tests
     /// model a real dictation; a test sets it false to exercise the silence gate.
     var didCaptureSpeech = true
+    var configuredSilenceTimeout: TimeInterval?
 
     func start(to url: URL) throws {
         startedURL = url
@@ -24,6 +25,9 @@ final class FakeRecorder: AudioRecording {
         return url
     }
     func cancel() { cancelled = true }
+    func updateSilenceTimeout(_ timeout: TimeInterval) {
+        configuredSilenceTimeout = timeout
+    }
 }
 
 struct FakeProvider: TranscriptionProvider {
@@ -102,6 +106,15 @@ struct FakeProvider: TranscriptionProvider {
             formatterUnavailable: { [weak self] in self?.fellBack = true })
         controller.onStateChange = { [weak self] state in self?.states.append(state) }
         return controller
+    }
+
+    @Test func testUpdateRecordingSettingsAppliesWithoutRelaunch() {
+        let controller = makeController(providers: [])
+
+        controller.updateRecordingSettings(silenceTimeout: 35, recordingsToKeep: 4)
+
+        #expect(recorder.configuredSilenceTimeout == 35)
+        #expect(controller.recordingsToKeep == 4)
     }
 
     @Test func testFormatterAppliedAndTermsSuggested() async throws {

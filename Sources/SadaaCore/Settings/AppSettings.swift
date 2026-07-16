@@ -18,20 +18,53 @@ public enum TranscriptionPreset: String, CaseIterable, Sendable {
     case fast, accurate
 }
 
+public enum SpeechProviderKind: String, CaseIterable, Sendable {
+    case azureOpenAI
+    case openAICompatible
+}
+
+public struct HotkeyAssignment: Equatable, Sendable {
+    public private(set) var dictation: Int
+    public private(set) var languageSwitch: Int
+
+    public init(dictation: Int, languageSwitch: Int) {
+        self.dictation = dictation
+        self.languageSwitch = languageSwitch
+    }
+
+    public mutating func setDictation(_ keycode: Int) {
+        let previous = dictation
+        if keycode == languageSwitch {
+            languageSwitch = previous
+        }
+        dictation = keycode
+    }
+
+    public mutating func setLanguageSwitch(_ keycode: Int) {
+        let previous = languageSwitch
+        if keycode == dictation {
+            dictation = previous
+        }
+        languageSwitch = keycode
+    }
+}
+
 /// Non-secret app configuration. API keys live in Keychain, never here.
 public final class AppSettings {
     private enum Keys {
+        static let speechProviderKind = "speechProviderKind"
         static let azureEndpoint = "azureEndpoint"
         static let azureDeployment = "azureDeployment"
         static let transcriptionPreset = "transcriptionPreset"
         static let fastTranscriptionDeployment = "fastTranscriptionDeployment"
         static let accurateTranscriptionDeployment = "accurateTranscriptionDeployment"
         static let azureAPIVersion = "azureAPIVersion"
+        static let compatibleEndpoint = "compatibleEndpoint"
+        static let compatibleModel = "compatibleModel"
         static let languagePin = "languagePin"
         static let silenceTimeout = "silenceTimeout"
         static let recordingsToKeep = "recordingsToKeep"
         static let hotkeyKeycode = "hotkeyKeycode"
-        static let voiceEditKeycode = "voiceEditKeycode"
         static let languageSwitchKeycode = "languageSwitchKeycode"
         static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
@@ -46,6 +79,14 @@ public final class AppSettings {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
+    }
+
+    public var speechProviderKind: SpeechProviderKind {
+        get {
+            SpeechProviderKind(rawValue: defaults.string(forKey: Keys.speechProviderKind) ?? "")
+                ?? .azureOpenAI
+        }
+        set { defaults.set(newValue.rawValue, forKey: Keys.speechProviderKind) }
     }
 
     public var azureEndpoint: String {
@@ -83,6 +124,16 @@ public final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.azureAPIVersion) }
     }
 
+    public var compatibleEndpoint: String {
+        get { defaults.string(forKey: Keys.compatibleEndpoint) ?? "" }
+        set { defaults.set(newValue, forKey: Keys.compatibleEndpoint) }
+    }
+
+    public var compatibleModel: String {
+        get { defaults.string(forKey: Keys.compatibleModel) ?? "whisper-1" }
+        set { defaults.set(newValue, forKey: Keys.compatibleModel) }
+    }
+
     public var languagePin: LanguagePin {
         get { LanguagePin(rawValue: defaults.string(forKey: Keys.languagePin) ?? "") ?? .auto }
         set { defaults.set(newValue.rawValue, forKey: Keys.languagePin) }
@@ -100,18 +151,10 @@ public final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.recordingsToKeep) }
     }
 
-    /// Virtual keycode of the activation modifier key. Default 54 = Right Command
-    /// (voice-edit then takes the other right-side tap key, Right Option).
+    /// Virtual keycode of the activation modifier key. Default 54 = Right Command.
     public var hotkeyKeycode: Int {
         get { defaults.object(forKey: Keys.hotkeyKeycode) as? Int ?? 54 }
         set { defaults.set(newValue, forKey: Keys.hotkeyKeycode) }
-    }
-
-    /// Virtual keycode of the voice-edit modifier key. Default 61 = Right Option.
-    /// Independent from the dictation key; the UI keeps the two distinct.
-    public var voiceEditKeycode: Int {
-        get { defaults.object(forKey: Keys.voiceEditKeycode) as? Int ?? 61 }
-        set { defaults.set(newValue, forKey: Keys.voiceEditKeycode) }
     }
 
     /// Virtual keycode of the language quick-switch key. Default 60 = Right Shift
@@ -119,7 +162,7 @@ public final class AppSettings {
     /// flips the dictation language between English and German. A bare Shift tap
     /// can fire by accident during fast capitalization, so if that becomes a
     /// nuisance the key is changeable in Settings. The Settings layer keeps it
-    /// distinct from the dictation and voice-edit keys.
+    /// distinct from the dictation key.
     public var languageSwitchKeycode: Int {
         get { defaults.object(forKey: Keys.languageSwitchKeycode) as? Int ?? 60 }
         set { defaults.set(newValue, forKey: Keys.languageSwitchKeycode) }

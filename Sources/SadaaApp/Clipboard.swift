@@ -2,8 +2,8 @@ import AppKit
 
 /// Save and restore the user's clipboard around a synthetic paste or copy.
 ///
-/// Dictation and voice-edit both have to put their own text on the clipboard to
-/// drive Cmd-V. Wispr Flow and good dictation tools never leave the user's
+/// Dictation temporarily puts its text on the clipboard to drive Cmd-V.
+/// Good dictation tools never leave the user's
 /// clipboard clobbered, so we snapshot it first and put it back once the paste
 /// has landed. Promised/lazy types (file promises and the like) can't be copied
 /// out and are dropped on restore; the common types (text, RTF, images, URLs)

@@ -5,9 +5,10 @@ import SadaaCore
 struct ScratchpadPage: View {
     @ObservedObject var viewModel: SadaaViewModel
     @ObservedObject var scratchpad: ScratchpadViewModel
+
     @State private var showImport = false
     @State private var importText = ""
-    @State private var importError = ""
+    @State private var importMessage = ""
 
     init(viewModel: SadaaViewModel) {
         self.viewModel = viewModel
@@ -15,318 +16,246 @@ struct ScratchpadPage: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+        GeometryReader { _ in
+            VStack(alignment: .leading, spacing: 22) {
                 header
                 workspace
             }
-            .padding(30)
-            .frame(maxWidth: 1120, alignment: .topLeading)
-            .frame(maxWidth: .infinity, alignment: .top)
+            .padding(32)
+            .frame(maxWidth: 1180, maxHeight: .infinity, alignment: .topLeading)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
         }
-        .background(Theme.cream)
-        .sheet(isPresented: $showImport) {
-            importSheet
-        }
+        .background(Theme.surface)
+        .sheet(isPresented: $showImport) { importSheet }
+        .onDisappear { scratchpad.commitDraft() }
     }
 
     private var header: some View {
         CommandPageHeader(
-            eyebrow: "Dictated thinking",
-            title: "Scratchpad",
-            subtitle: "A local writing desk for dictated notes, AI workflow fragments, and reusable thinking."
+            title: "Notes",
+            subtitle: "Keep dictated ideas, reusable text and working notes in one private place."
         ) {
-            Button {
-                _ = scratchpad.createNote(title: "Untitled", body: " ")
-            } label: {
-                Label("New note", systemImage: "square.and.pencil")
-                    .font(.system(size: 13, weight: .semibold))
-            }
+            Button("New note") { scratchpad.createNote() }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
+                .tint(Theme.brand)
+                .controlSize(.large)
                 .clickableCursor()
         }
     }
 
     private var workspace: some View {
-        ViewThatFits(in: .horizontal) {
-            HStack(alignment: .top, spacing: 16) {
-                noteRail
-                    .frame(width: 300)
+        GeometryReader { geometry in
+            HStack(alignment: .top, spacing: 18) {
+                noteList
+                    .frame(minWidth: 240, idealWidth: 300, maxWidth: 320)
+                    .frame(height: geometry.size.height)
                 editor
-                    .frame(minWidth: 460, maxWidth: .infinity)
-                utilityRail
-                    .frame(width: 240)
+                    .frame(minWidth: 300, maxWidth: .infinity)
+                    .frame(height: geometry.size.height)
             }
-
-            VStack(alignment: .leading, spacing: 16) {
-                noteRail
-                    .frame(maxWidth: .infinity)
-                editor
-                    .frame(maxWidth: .infinity)
-                utilityRail
-                    .frame(maxWidth: .infinity)
-            }
+            .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .layoutPriority(1)
     }
 
-    private var noteRail: some View {
-        CommandPanel("Notes", icon: "note.text") {
-            VStack(alignment: .leading, spacing: 12) {
-                PremiumSearchField(placeholder: "Search notes", text: Binding(
-                    get: { scratchpad.query },
-                    set: { scratchpad.query = $0 }
-                ))
-                if scratchpad.filteredNotes.isEmpty {
-                    CommandEmptyState(
-                        icon: "note.text",
-                        title: "No notes found",
-                        detail: scratchpad.query.isEmpty ? "Create your first local note." : "Try a different search."
-                    )
-                } else {
-                    ScrollView {
-                        LazyVStack(spacing: 8) {
-                            ForEach(scratchpad.filteredNotes) { note in
-                                ScratchpadNoteRow(
-                                    note: note,
-                                    isSelected: scratchpad.selectedID == note.id,
-                                    onSelect: { scratchpad.select(note.id) }
-                                )
-                            }
+    private var noteList: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            PremiumSearchField(placeholder: "Search notes", text: $scratchpad.query)
+
+            if scratchpad.filteredNotes.isEmpty {
+                CommandEmptyState(
+                    icon: scratchpad.notes.isEmpty ? "note.text" : "magnifyingglass",
+                    title: scratchpad.notes.isEmpty ? "No notes yet" : "No matching notes",
+                    detail: scratchpad.notes.isEmpty
+                        ? "Create a note or send a transcript here from the Library."
+                        : "Try a shorter search or a tag."
+                )
+            } else {
+                ScrollView {
+                    LazyVStack(spacing: 5) {
+                        ForEach(scratchpad.filteredNotes) { note in
+                            ScratchpadNoteRow(
+                                note: note,
+                                isSelected: scratchpad.selectedID == note.id,
+                                onSelect: { scratchpad.select(note.id) }
+                            )
                         }
-                        .padding(.bottom, 8)
                     }
-                    .frame(maxHeight: .infinity)
                 }
             }
         }
+        .padding(14)
+        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
+        .frame(maxHeight: .infinity)
     }
 
-    @ViewBuilder
     private var editor: some View {
-        if scratchpad.selected == nil {
-            CommandPanel {
+        Group {
+            if let selected = scratchpad.selected {
+                GeometryReader { geometry in
+                    VStack(alignment: .leading, spacing: 14) {
+                        editorToolbar(selected)
+
+                        TextField(
+                            "Note title",
+                            text: Binding(
+                                get: { scratchpad.draftTitle },
+                                set: { scratchpad.updateDraftTitle($0) }
+                            )
+                        )
+                        .textFieldStyle(.plain)
+                        .font(.system(size: 24, weight: .bold))
+                        .foregroundStyle(Theme.ink)
+
+                        TextEditor(
+                            text: Binding(
+                                get: { scratchpad.draftBody },
+                                set: { scratchpad.updateDraftBody($0) }
+                            )
+                        )
+                        .font(.system(size: 15))
+                        .foregroundStyle(Theme.ink)
+                        .scrollContentBackground(.hidden)
+                        .padding(2)
+                        .frame(height: max(180, geometry.size.height - 190))
+
+                        Divider().overlay(Theme.line)
+
+                        HStack(spacing: 12) {
+                            TextField(
+                                "Tags, comma separated",
+                                text: Binding(
+                                    get: { scratchpad.draftTags },
+                                    set: { scratchpad.updateDraftTags($0) }
+                                )
+                            )
+                            .premiumInputChrome()
+
+                            Text("\(ScratchpadNote.wordCount(in: scratchpad.draftBody)) words")
+                                .font(.system(size: 11).monospacedDigit())
+                                .foregroundStyle(Theme.muted)
+                            Text("Saved automatically")
+                                .font(.system(size: 11))
+                                .foregroundStyle(Theme.success)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+
+                        if !scratchpad.saveError.isEmpty {
+                            Text(scratchpad.saveError)
+                                .font(.system(size: 12))
+                                .foregroundStyle(Theme.danger)
+                        }
+                    }
+                    .padding(24)
+                    .frame(width: geometry.size.width, height: geometry.size.height, alignment: .top)
+                }
+            } else {
                 CommandEmptyState(
-                    icon: "square.and.pencil",
+                    icon: "note.text",
                     title: "Select or create a note",
-                    detail: "Scratchpad keeps dictated thoughts local, searchable, and ready to reuse."
+                    detail: "Notes save automatically as you type."
                 )
             }
-        } else {
-            CommandPanel {
-                VStack(alignment: .leading, spacing: 14) {
-                    HStack(alignment: .center, spacing: 10) {
-                        TextField("Title", text: Binding(
-                            get: { scratchpad.draftTitle },
-                            set: { scratchpad.updateDraftTitle($0) }
-                        ))
-                        .textFieldStyle(.plain)
-                        .font(.system(size: 25, weight: .bold))
-                        .foregroundStyle(Theme.ink)
-                        Spacer(minLength: 8)
-                        PremiumStatusBadge(icon: "checkmark.circle.fill", text: "Auto-saved", tint: Theme.sage)
-                    }
-
-                    TextField("Tags, comma separated", text: Binding(
-                        get: { scratchpad.draftTags },
-                        set: { scratchpad.updateDraftTags($0) }
-                    ))
-                    .premiumInputChrome()
-                    .frame(maxWidth: 520)
-
-                    noteStats
-
-                    TextEditor(text: Binding(
-                        get: { scratchpad.draftBody },
-                        set: { scratchpad.updateDraftBody($0) }
-                    ))
-                    .font(.system(size: 14))
-                    .foregroundStyle(Theme.ink)
-                    .scrollContentBackground(.hidden)
-                    .padding(10)
-                    .background(Theme.white)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8)
-                            .strokeBorder(Theme.line, lineWidth: 1)
-                    )
-                    .frame(minHeight: 360, idealHeight: 420)
-
-                    if !scratchpad.saveError.isEmpty {
-                        Text(scratchpad.saveError)
-                            .font(.caption)
-                            .foregroundStyle(Theme.red)
-                    }
-                }
-            }
         }
+        .frame(maxHeight: .infinity, alignment: .top)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
     }
 
-    private var utilityRail: some View {
-        CommandPanel("Actions", icon: "slider.horizontal.3") {
-            VStack(alignment: .leading, spacing: 10) {
-                if let selected = scratchpad.selected {
-                    utilityButton(
-                        selected.isPinned ? "Unpin note" : "Pin note",
-                        icon: selected.isPinned ? "pin.slash" : "pin"
-                    ) {
-                        scratchpad.setPinned(!selected.isPinned)
-                    }
+    private func editorToolbar(_ selected: ScratchpadNote) -> some View {
+        HStack {
+            Button {
+                scratchpad.setPinned(!selected.isPinned)
+            } label: {
+                Label(selected.isPinned ? "Unpin" : "Pin", systemImage: selected.isPinned ? "pin.slash" : "pin")
+            }
+            .buttonStyle(.borderless)
+            .clickableCursor()
+
+            Button("Append latest dictation") {
+                if let latest = viewModel.recent.first?.text {
+                    scratchpad.appendTextToSelectedOrCreate(latest)
                 }
-                utilityButton("Append latest dictation", icon: "text.badge.plus") {
-                    if let latest = viewModel.recent.first?.text {
-                        scratchpad.appendTextToSelectedOrCreate(latest)
-                    }
+            }
+            .buttonStyle(.borderless)
+            .clickableCursor()
+            .disabled(viewModel.recent.isEmpty)
+
+            Spacer()
+
+            Menu {
+                Button("Duplicate note") { scratchpad.duplicateSelected() }
+                Button("Copy note as Markdown") {
+                    if let value = scratchpad.exportMarkdownForSelected() { copy(value) }
                 }
-                .disabled(viewModel.recent.isEmpty)
-                utilityButton("Duplicate note", icon: "plus.square.on.square") {
-                    scratchpad.duplicateSelected()
-                }
-                .disabled(scratchpad.selected == nil)
-                utilityButton("Copy note Markdown", icon: "doc.on.clipboard") {
-                    copyMarkdown()
-                }
-                .disabled(scratchpad.selected == nil)
-                Divider()
-                utilityButton("Copy all Markdown", icon: "square.and.arrow.up") {
-                    copyAllMarkdown()
-                }
-                .disabled(scratchpad.notes.isEmpty)
-                utilityButton("Copy JSON backup", icon: "externaldrive") {
-                    copyAllJSON()
-                }
-                .disabled(scratchpad.notes.isEmpty)
-                utilityButton("Import JSON backup", icon: "square.and.arrow.down") {
-                    beginImport()
+                Button("Copy all notes as Markdown") { copy(scratchpad.exportAllMarkdown()) }
+                Button("Copy JSON backup") { copy(scratchpad.exportAllJSON()) }
+                Button("Import JSON backup") {
+                    importText = ""
+                    importMessage = ""
+                    showImport = true
                 }
                 Divider()
-                utilityButton("Delete note", icon: "trash", tint: Theme.red) {
-                    scratchpad.deleteSelected()
-                }
-                .disabled(scratchpad.selected == nil)
+                Button("Delete note", role: .destructive) { scratchpad.deleteSelected() }
+            } label: {
+                Image(systemName: "ellipsis.circle")
             }
+            .menuStyle(.borderlessButton)
+            .frame(width: 34)
+            .help("Note actions")
+            .clickableCursor()
         }
-    }
-
-    private func utilityButton(_ title: String,
-                               icon: String,
-                               tint: Color = Theme.navy,
-                               action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Label(title, systemImage: icon)
-                .font(.system(size: 12, weight: .semibold))
-                .lineLimit(1)
-                .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .buttonStyle(.plain)
-        .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 8)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 8))
-        .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(tint.opacity(0.18), lineWidth: 1)
-        )
-        .clickableCursor()
-    }
-
-    private var noteStats: some View {
-        HStack(spacing: 8) {
-            PremiumStatusBadge(icon: "textformat", text: wordCountText(draftWordCount), tint: Theme.navy)
-            PremiumStatusBadge(icon: "character.cursor.ibeam", text: "\(scratchpad.draftBody.count) chars", tint: Theme.sage)
-            if let selected = scratchpad.selected {
-                PremiumStatusBadge(icon: "calendar", text: "Updated \(PageFormat.relativeTime(selected.updatedAt))", tint: Theme.gold)
-            }
-            if let opened = scratchpad.selected?.lastOpenedAt {
-                PremiumStatusBadge(icon: "clock", text: "Opened \(PageFormat.relativeTime(opened))", tint: Theme.navy)
-            }
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .font(.system(size: 12, weight: .medium))
     }
 
     private var importSheet: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            CommandPageHeader(
-                eyebrow: "Scratchpad",
-                title: "Import JSON",
-                subtitle: "Paste a local Scratchpad backup. Matching note IDs are updated; new notes are added."
-            )
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Import notes")
+                .font(.system(size: 22, weight: .bold))
+                .foregroundStyle(Theme.ink)
+            Text("Paste a Sadaa JSON backup. Existing note IDs are updated and new notes are added.")
+                .font(.system(size: 13))
+                .foregroundStyle(Theme.muted)
 
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
-                .foregroundStyle(Theme.ink)
                 .scrollContentBackground(.hidden)
-                .padding(8)
-                .background(Theme.white)
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 8)
-                        .strokeBorder(Theme.line, lineWidth: 1)
-                )
-                .frame(minHeight: 240)
+                .padding(10)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.line, lineWidth: 1))
+                .frame(minHeight: 230)
 
-            if !importError.isEmpty {
-                Text(importError)
-                    .font(.caption)
-                    .foregroundStyle(Theme.red)
+            if !importMessage.isEmpty {
+                Text(importMessage)
+                    .font(.system(size: 12))
+                    .foregroundStyle(importMessage.hasPrefix("Imported") ? Theme.success : Theme.danger)
             }
 
             HStack {
                 Spacer()
-                Button("Cancel") {
-                    showImport = false
-                }
-                .clickableCursor()
+                Button("Cancel") { showImport = false }
+                    .clickableCursor()
                 Button("Import") {
-                    importScratchpad()
+                    guard let result = scratchpad.importJSON(importText) else {
+                        importMessage = "The JSON backup could not be read."
+                        return
+                    }
+                    importMessage = "Imported \(result.inserted) new and updated \(result.updated)."
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(Theme.navy)
+                .tint(Theme.brand)
                 .clickableCursor()
                 .disabled(importText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             }
         }
         .padding(24)
-        .frame(width: 560)
-        .background(Theme.cream)
+        .frame(width: 560, height: 430)
+        .background(Theme.surface)
     }
 
-    private func copyMarkdown() {
-        guard let markdown = scratchpad.exportMarkdownForSelected() else { return }
+    private func copy(_ value: String) {
         NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(markdown, forType: .string)
-    }
-
-    private func copyAllMarkdown() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(scratchpad.exportAllMarkdown(), forType: .string)
-    }
-
-    private func copyAllJSON() {
-        NSPasteboard.general.clearContents()
-        NSPasteboard.general.setString(scratchpad.exportAllJSON(), forType: .string)
-    }
-
-    private func beginImport() {
-        importText = ""
-        importError = ""
-        showImport = true
-    }
-
-    private func importScratchpad() {
-        guard scratchpad.importJSON(importText) != nil else {
-            importError = "Paste a valid Scratchpad JSON backup."
-            return
-        }
-        importError = ""
-        showImport = false
-    }
-
-    private var draftWordCount: Int {
-        ScratchpadNote.wordCount(in: scratchpad.draftBody)
-    }
-
-    private func wordCountText(_ count: Int) -> String {
-        "\(count) \(count == 1 ? "word" : "words")"
+        NSPasteboard.general.setString(value, forType: .string)
     }
 }
