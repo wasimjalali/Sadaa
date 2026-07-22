@@ -176,9 +176,9 @@ struct BrandedMenuPicker<Value: Hashable>: View {
                 Spacer(minLength: 8)
                 Image(systemName: "chevron.up.chevron.down")
                     .font(.system(size: 9, weight: .semibold))
-                    .foregroundStyle(Theme.muted)
+                    .foregroundStyle(Theme.brand.opacity(0.55))
             }
-            .font(.system(size: 12, weight: .medium))
+            .font(.system(size: 12, weight: .semibold))
             .foregroundStyle(Theme.ink)
             .frame(maxWidth: .infinity)
             .contentShape(Rectangle())
@@ -186,18 +186,90 @@ struct BrandedMenuPicker<Value: Hashable>: View {
         .menuStyle(.borderlessButton)
         .menuIndicator(.hidden)
         .buttonStyle(.plain)
-        .padding(.horizontal, 11)
-        .frame(height: 32)
-        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 8))
+        .padding(.horizontal, 12)
+        .frame(height: 34)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 9))
         .overlay(
-            RoundedRectangle(cornerRadius: 8)
-                .strokeBorder(Theme.brand.opacity(0.24), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 9)
+                .strokeBorder(Theme.brand.opacity(0.22), lineWidth: 1)
         )
         .fixedSize(horizontal: false, vertical: true)
         .help(title)
         .accessibilityLabel(title)
         .accessibilityValue(selectedLabel)
         .clickableCursor()
+    }
+}
+
+/// On-brand overflow / actions menu (replaces bare system ellipsis menus).
+struct BrandedMenuButton<Content: View>: View {
+    let help: String
+    var systemImage: String = "ellipsis"
+    @ViewBuilder let content: () -> Content
+
+    @State private var hovering = false
+
+    var body: some View {
+        Menu(content: content) {
+            Image(systemName: systemImage)
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(Theme.brand)
+                .frame(width: 32, height: 32)
+                .background(
+                    RoundedRectangle(cornerRadius: 8)
+                        .fill(Theme.brand.opacity(hovering ? 0.10 : 0.05))
+                )
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(Theme.brand.opacity(hovering ? 0.32 : 0.18), lineWidth: 1)
+                )
+                .contentShape(Rectangle())
+        }
+        .menuStyle(.borderlessButton)
+        .menuIndicator(.hidden)
+        .buttonStyle(.plain)
+        .help(help)
+        .accessibilityLabel(help)
+        .onHover { hovering = $0 }
+        .clickableCursor()
+        .animation(.easeOut(duration: 0.14), value: hovering)
+    }
+}
+
+/// Compact brand-tinted segment control for page-local tabs.
+struct BrandedSegmentedControl<Value: Hashable>: View {
+    @Binding var selection: Value
+    let options: [(label: String, value: Value)]
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(options.indices, id: \.self) { index in
+                let option = options[index]
+                let selected = option.value == selection
+                Button {
+                    selection = option.value
+                } label: {
+                    Text(option.label)
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(selected ? Theme.surface : Theme.ink.opacity(0.72))
+                        .padding(.horizontal, 12)
+                        .padding(.vertical, 7)
+                        .frame(maxWidth: .infinity)
+                        .background(
+                            RoundedRectangle(cornerRadius: 7)
+                                .fill(selected ? Theme.brand : Color.clear)
+                        )
+                }
+                .buttonStyle(.plain)
+                .clickableCursor()
+            }
+        }
+        .padding(3)
+        .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Theme.line, lineWidth: 1)
+        )
     }
 }
 

@@ -163,13 +163,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             providers: { [settings] in Self.buildProviders(settings: settings) },
             store: store,
             hint: { [settings, languageMemory] in
-                let memory = languageMemory.snapshot()
-                return TranscriptionHint(languagePin: settings.languagePin,
-                                  dictionaryWords: MemoryBiasBuilder.biasList(
-                                    terms: memory.terms,
-                                    baseVocabulary: BaseVocabulary.terms,
-                                    budget: 50,
-                                    language: MemoryLanguage(languagePin: settings.languagePin)))
+                TranscriptionHint(
+                    languagePin: settings.languagePin,
+                    dictionaryWords: Self.dictionaryBiasWords(
+                        from: languageMemory.snapshot(),
+                        languagePin: settings.languagePin
+                    )
+                )
             },
             recordingsToKeep: settings.recordingsToKeep,
             deliver: { [weak self] text, done in
@@ -215,11 +215,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 let memory = languageMemory.snapshot()
                 return FormattingContext(
                     appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-                    dictionaryWords: MemoryBiasBuilder.biasList(
-                        terms: memory.terms,
-                        baseVocabulary: BaseVocabulary.terms,
-                        budget: 50,
-                        language: MemoryLanguage(languagePin: settings.languagePin)),
+                    dictionaryWords: Self.dictionaryBiasWords(
+                        from: memory,
+                        languagePin: settings.languagePin
+                    ),
                     language: settings.languagePin,
                     snippets: Self.snippets(from: memory),
                     replacementRules: memory.replacements)
@@ -359,14 +358,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     private func transcriptionHint(languageMemory: LanguageMemoryStore) -> TranscriptionHint {
-        let memory = languageMemory.snapshot()
-        return TranscriptionHint(
+        TranscriptionHint(
             languagePin: settings.languagePin,
-            dictionaryWords: MemoryBiasBuilder.biasList(
-                terms: memory.terms,
-                baseVocabulary: BaseVocabulary.terms,
-                budget: 50,
-                language: MemoryLanguage(languagePin: settings.languagePin)
+            dictionaryWords: Self.dictionaryBiasWords(
+                from: languageMemory.snapshot(),
+                languagePin: settings.languagePin
             )
         )
     }
@@ -375,15 +371,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         let memory = languageMemory.snapshot()
         return FormattingContext(
             appBundleID: NSWorkspace.shared.frontmostApplication?.bundleIdentifier,
-            dictionaryWords: MemoryBiasBuilder.biasList(
-                terms: memory.terms,
-                baseVocabulary: BaseVocabulary.terms,
-                budget: 50,
-                language: MemoryLanguage(languagePin: settings.languagePin)
+            dictionaryWords: Self.dictionaryBiasWords(
+                from: memory,
+                languagePin: settings.languagePin
             ),
             language: settings.languagePin,
             snippets: Self.snippets(from: memory),
             replacementRules: memory.replacements
+        )
+    }
+
+    /// Deepgram keyterm budget. Correct spellings only (terms, correction
+    /// targets, snippet triggers, base vocabulary). Pronunciations stay local.
+    private static let dictionaryBiasBudget = 100
+
+    private static func dictionaryBiasWords(from memory: LanguageMemorySnapshot,
+                                            languagePin: LanguagePin) -> [String] {
+        MemoryBiasBuilder.biasList(
+            terms: memory.terms,
+            baseVocabulary: BaseVocabulary.terms,
+            budget: dictionaryBiasBudget,
+            language: MemoryLanguage(languagePin: languagePin),
+            replacements: memory.replacements,
+            snippets: memory.snippets
         )
     }
 

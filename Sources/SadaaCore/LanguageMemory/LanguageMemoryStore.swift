@@ -65,13 +65,61 @@ public final class LanguageMemoryStore {
         if let index = state.terms.firstIndex(where: {
             $0.id == normalized.id || TermMatcher.matches($0.phrase, normalized.phrase)
         }) {
-            state.terms[index] = normalized
+            let existing = state.terms[index]
+            // Keep a stable ID so usage tracking and history links still match.
+            let keepID = existing.id == normalized.id || TermMatcher.matches(existing.phrase, normalized.phrase)
+                ? existing.id
+                : normalized.id
+            let merged = MemoryTerm(
+                id: keepID,
+                phrase: normalized.phrase,
+                pronunciations: trimmedUnique(existing.pronunciations + normalized.pronunciations),
+                aliases: trimmedUnique(existing.aliases + normalized.aliases),
+                language: normalized.language,
+                priority: strongerPriority(existing.priority, normalized.priority),
+                notes: normalized.notes.isEmpty ? existing.notes : normalized.notes,
+                createdAt: existing.createdAt,
+                updatedAt: normalized.updatedAt,
+                usageCount: max(existing.usageCount, normalized.usageCount)
+            )
+            state.terms[index] = merged
+            removeSuggestions(matching: merged.phrase)
+            save()
+            return merged
         } else {
             state.terms.insert(normalized, at: 0)
+            removeSuggestions(matching: normalized.phrase)
+            save()
+            return normalized
         }
-        removeSuggestions(matching: normalized.phrase)
-        save()
-        return normalized
+    }
+
+    /// Learn from an observed → corrected edit (Library teaching + word-level
+    /// auto-learn). Creates deterministic auto-corrections and high-priority
+    /// dictionary terms so the same mistake is fixed next time.
+    @discardableResult
+    public func learnFromEdit(original: String,
+                              corrected: String,
+                              language: MemoryLanguage = .auto,
+                              now: Date = Date()) -> LanguageMemoryLearnResult {
+        let existing = state.terms.map(\.phrase)
+            + state.replacements.map(\.replacement)
+        let result = LanguageMemoryLearningPolicy.entries(
+            observed: original,
+            corrected: corrected,
+            language: language,
+            existingDictionary: existing,
+            now: now
+        )
+        for entry in result.entries {
+            switch entry {
+            case .term(let term):
+                _ = upsertTerm(term)
+            case .replacement(let rule):
+                _ = upsertReplacement(rule)
+            }
+        }
+        return result
     }
 
     @discardableResult
@@ -279,7 +327,20 @@ public final class LanguageMemoryStore {
     }
 
     private func removeSuggestions(matching phrase: String) {
-        state.suggestions.removeAll { TermMatcher.matches($0.observed, phrase) }
+        state.suggestions.removeAll {
+            TermMatcher.matches($0.observed, phrase) || TermMatcher.matches($0.proposed, phrase)
+        }
+    }
+
+    private func strongerPriority(_ a: MemoryPriority, _ b: MemoryPriority) -> MemoryPriority {
+        let rank: (MemoryPriority) -> Int = {
+            switch $0 {
+            case .always: return 0
+            case .high: return 1
+            case .normal: return 2
+            }
+        }
+        return rank(a) <= rank(b) ? a : b
     }
 
     private func save() {

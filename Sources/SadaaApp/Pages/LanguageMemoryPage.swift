@@ -4,18 +4,13 @@ import SadaaCore
 
 struct LanguageMemoryPage: View {
     @ObservedObject var viewModel: LanguageMemoryViewModel
+    @EnvironmentObject private var toasts: AppToastCenter
 
     @State private var section: DictionarySection = .words
     @State private var word = ""
-    @State private var pronunciations = ""
-    @State private var aliases = ""
-    @State private var notes = ""
-    @State private var priority: MemoryPriority = .high
-    @State private var wordLanguage: MemoryLanguage = .auto
+    @State private var soundsLike = ""
     @State private var heard = ""
     @State private var replacement = ""
-    @State private var replacementLanguage: MemoryLanguage = .auto
-    @State private var matchMode: ReplacementMatchMode = .wordBoundaryPhrase
     @State private var snippetTrigger = ""
     @State private var snippetExpansion = ""
     @State private var showImport = false
@@ -25,319 +20,353 @@ struct LanguageMemoryPage: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
+            VStack(alignment: .leading, spacing: 18) {
                 header
                 if !viewModel.suggestions.isEmpty { suggestions }
-                sectionPicker
-                quickAdd
-                entries
-                shortcuts
+                teachCard
+                libraryCard
             }
             .padding(32)
-            .frame(maxWidth: 980, alignment: .topLeading)
+            .frame(maxWidth: 920, alignment: .topLeading)
             .frame(maxWidth: .infinity, alignment: .top)
         }
         .background(Theme.surface)
         .sheet(isPresented: $showImport) { importSheet }
     }
 
+    // MARK: - Header
+
     private var header: some View {
         CommandPageHeader(
             title: "Dictionary",
-            subtitle: "Teach Sadaa the exact words, names and corrections that matter to you."
+            subtitle: "Teach names once. Sadaa biases recognition and fixes the same mistakes next time."
         ) {
-            Menu {
-                Button("Copy full backup") { copy(viewModel.exportSnapshotJSON()) }
-                Button("Copy words as CSV") { copy(viewModel.exportTermsCSV()) }
-                Button("Copy corrections as CSV") { copy(viewModel.exportReplacementsCSV()) }
+            BrandedMenuButton(help: "Import and export") {
+                Button("Copy full backup") {
+                    copy(viewModel.exportSnapshotJSON(), toast: "Backup copied")
+                }
+                Button("Copy words as CSV") {
+                    copy(viewModel.exportTermsCSV(), toast: "Words CSV copied")
+                }
+                Button("Copy corrections as CSV") {
+                    copy(viewModel.exportReplacementsCSV(), toast: "Corrections CSV copied")
+                }
                 Divider()
                 Button("Import dictionary") {
                     importText = ""
                     importMessage = ""
                     showImport = true
                 }
-            } label: {
-                Label("Import and export", systemImage: "ellipsis.circle")
-                    .labelStyle(.iconOnly)
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 34)
-            .help("Import and export")
-            .clickableCursor()
         }
     }
 
+    // MARK: - Suggestions
+
     private var suggestions: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack {
-                VStack(alignment: .leading, spacing: 2) {
-                    Text("Suggestions to review")
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(Theme.ink)
-                    Text("Sadaa noticed these spellings in recent corrections.")
-                        .font(.system(size: 11))
-                        .foregroundStyle(Theme.muted)
-                }
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text("Review suggestions")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
                 Spacer()
                 Text("\(viewModel.suggestions.count)")
                     .font(.system(size: 12, weight: .semibold).monospacedDigit())
-                    .foregroundStyle(Theme.brand)
+                    .foregroundStyle(Theme.muted)
             }
 
-            ForEach(viewModel.filteredSuggestions.prefix(3)) { suggestion in
+            ForEach(viewModel.filteredSuggestions.prefix(4)) { suggestion in
                 HStack(spacing: 10) {
-                    Text(suggestion.proposed)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                    Spacer()
-                    Button("Dismiss") { viewModel.dismissSuggestion(suggestion.id) }
-                        .buttonStyle(.borderless)
-                        .clickableCursor()
-                    Button("Add") { viewModel.acceptSuggestion(suggestion.id, as: suggestion.kind) }
-                        .buttonStyle(.bordered)
-                        .tint(Theme.brand)
-                        .clickableCursor()
+                    suggestionLabel(suggestion)
+                    Spacer(minLength: 8)
+                    Button("Dismiss") {
+                        viewModel.dismissSuggestion(suggestion.id)
+                        toasts.show("Suggestion dismissed", kind: .info)
+                    }
+                    .buttonStyle(.borderless)
+                    .clickableCursor()
+                    Button("Add") {
+                        viewModel.acceptSuggestion(suggestion.id, as: suggestion.kind)
+                        toasts.show("Added to dictionary")
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.brand)
+                    .controlSize(.small)
+                    .clickableCursor()
                 }
-                .padding(.vertical, 3)
+                .padding(.vertical, 2)
             }
         }
         .padding(16)
         .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 12))
-    }
-
-    private var sectionPicker: some View {
-        HStack(spacing: 14) {
-            Picker("Dictionary section", selection: $section) {
-                ForEach(DictionarySection.allCases) { item in
-                    Text(item.title).tag(item)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(maxWidth: 360)
-            .tint(Theme.brand)
-            .clickableCursor()
-
-            PremiumSearchField(placeholder: "Search dictionary", text: $viewModel.query)
-                .frame(maxWidth: 360)
-            Spacer()
-        }
+        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
     }
 
     @ViewBuilder
-    private var quickAdd: some View {
-        switch section {
-        case .words: addWordPanel
-        case .corrections: addCorrectionPanel
-        }
-    }
-
-    private var addWordPanel: some View {
-        CommandPanel("Add a word or name") {
-            VStack(alignment: .leading, spacing: 12) {
-                HStack(spacing: 10) {
-                    TextField("Claude Code, Sadaa, MCP", text: $word)
-                        .premiumInputChrome()
-                    Button("Add word") { addWord() }
-                        .buttonStyle(.borderedProminent)
-                        .tint(Theme.brand)
-                        .controlSize(.large)
-                        .clickableCursor()
-                        .disabled(word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-
-                DisclosureGroup("Advanced spelling help") {
-                    VStack(alignment: .leading, spacing: 10) {
-                        TextField("Sounds like, comma separated", text: $pronunciations)
-                            .premiumInputChrome()
-                        TextField("Alternative spellings, comma separated", text: $aliases)
-                            .premiumInputChrome()
-                        TextField("Optional note", text: $notes)
-                            .premiumInputChrome()
-                        WrappingHStack(horizontalSpacing: 12, verticalSpacing: 8) {
-                            BrandedMenuPicker(
-                                title: "Priority",
-                                selection: $priority,
-                                options: [
-                                    ("Normal", MemoryPriority.normal),
-                                    ("High", MemoryPriority.high),
-                                    ("Always", MemoryPriority.always),
-                                ]
-                            )
-                            .frame(width: 150)
-                            BrandedMenuPicker(
-                                title: "Language",
-                                selection: $wordLanguage,
-                                options: [
-                                    ("Any language", MemoryLanguage.auto),
-                                    ("English", MemoryLanguage.en),
-                                    ("German", MemoryLanguage.de),
-                                ]
-                            )
-                            .frame(width: 170)
-                        }
-                    }
-                    .padding(.top, 10)
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.muted)
-            }
-        }
-    }
-
-    private var addCorrectionPanel: some View {
-        CommandPanel("Add an auto-correction") {
-            VStack(alignment: .leading, spacing: 12) {
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 10) {
-                        TextField("When Sadaa hears", text: $heard)
-                            .premiumInputChrome()
-                        Image(systemName: "arrow.right")
-                            .foregroundStyle(Theme.muted)
-                        TextField("Write this instead", text: $replacement)
-                            .premiumInputChrome()
-                        addCorrectionButton
-                    }
-                    VStack(spacing: 10) {
-                        TextField("When Sadaa hears", text: $heard).premiumInputChrome()
-                        TextField("Write this instead", text: $replacement).premiumInputChrome()
-                        addCorrectionButton.frame(maxWidth: .infinity, alignment: .trailing)
-                    }
-                }
-
-                DisclosureGroup("Advanced matching") {
-                    WrappingHStack(horizontalSpacing: 12, verticalSpacing: 8) {
-                        BrandedMenuPicker(
-                            title: "Match",
-                            selection: $matchMode,
-                            options: [
-                                ("Word boundary", ReplacementMatchMode.wordBoundaryPhrase),
-                                ("Case-insensitive", ReplacementMatchMode.caseInsensitivePhrase),
-                                ("Exact phrase", ReplacementMatchMode.exactPhrase),
-                            ]
-                        )
-                        .frame(width: 170)
-                        BrandedMenuPicker(
-                            title: "Language",
-                            selection: $replacementLanguage,
-                            options: [
-                                ("Any language", MemoryLanguage.auto),
-                                ("English", MemoryLanguage.en),
-                                ("German", MemoryLanguage.de),
-                            ]
-                        )
-                        .frame(width: 170)
-                    }
-                    .padding(.top, 10)
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.muted)
-            }
-        }
-    }
-
-    private var addCorrectionButton: some View {
-        Button("Add correction") { addCorrection() }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.brand)
-            .controlSize(.large)
-            .clickableCursor()
-            .disabled(
-                heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ||
-                replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-            )
-    }
-
-    private var entries: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text(section == .words ? "Saved words" : "Saved corrections")
-                    .font(.system(size: 16, weight: .semibold))
-                    .foregroundStyle(Theme.ink)
-                Spacer()
-                Text("\(section == .words ? viewModel.filteredTerms.count : viewModel.filteredReplacements.count)")
-                    .font(.system(size: 12).monospacedDigit())
+    private func suggestionLabel(_ suggestion: MemorySuggestion) -> some View {
+        if suggestion.kind == .replacement,
+           !suggestion.observed.isEmpty,
+           suggestion.observed.caseInsensitiveCompare(suggestion.proposed) != .orderedSame {
+            HStack(spacing: 8) {
+                Text(suggestion.observed)
+                    .font(.system(size: 13, weight: .medium))
                     .foregroundStyle(Theme.muted)
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 10, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                Text(suggestion.proposed)
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(Theme.ink)
+            }
+        } else {
+            Text(suggestion.proposed)
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+        }
+    }
+
+    // MARK: - Teach
+
+    private var teachCard: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Teach Sadaa")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(Theme.ink)
+
+            ViewThatFits(in: .horizontal) {
+                HStack(alignment: .top, spacing: 14) {
+                    addWordBlock.frame(maxWidth: .infinity, alignment: .topLeading)
+                    Divider().overlay(Theme.line)
+                    fixMistakeBlock.frame(maxWidth: .infinity, alignment: .topLeading)
+                }
+                VStack(alignment: .leading, spacing: 16) {
+                    addWordBlock
+                    Divider().overlay(Theme.line)
+                    fixMistakeBlock
+                }
+            }
+        }
+        .padding(18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 1))
+    }
+
+    private var addWordBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            label("Add a word")
+            HStack(spacing: 8) {
+                TextField("Claude Code, Sadaa, Kubernetes", text: $word)
+                    .premiumInputChrome()
+                    .onSubmit { addWord() }
+                Button("Add") { addWord() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.brand)
+                    .clickableCursor()
+                    .disabled(word.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+            TextField("Sounds like (optional)", text: $soundsLike)
+                .premiumInputChrome()
+                .onSubmit { addWord() }
+            Text("Biases recognition and fixes casing locally.")
+                .font(.system(size: 11))
+                .foregroundStyle(Theme.muted)
+        }
+    }
+
+    private var fixMistakeBlock: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            label("Fix a mistake")
+            HStack(spacing: 8) {
+                TextField("Heard", text: $heard)
+                    .premiumInputChrome()
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Theme.accent)
+                TextField("Write this", text: $replacement)
+                    .premiumInputChrome()
+            }
+            HStack {
+                Text("Learns an auto-correction for next time.")
+                    .font(.system(size: 11))
+                    .foregroundStyle(Theme.muted)
+                Spacer()
+                Button("Learn") { addCorrection() }
+                    .buttonStyle(.borderedProminent)
+                    .tint(Theme.brand)
+                    .clickableCursor()
+                    .disabled(correctionDisabled)
+            }
+        }
+    }
+
+    private var correctionDisabled: Bool {
+        heard.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || replacement.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    // MARK: - Library
+
+    private var libraryCard: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 12) {
+                BrandedSegmentedControl(
+                    selection: $section,
+                    options: DictionarySection.allCases.map { ($0.title, $0) }
+                )
+                .frame(maxWidth: 380)
+
+                PremiumSearchField(placeholder: "Search", text: $viewModel.query)
+                    .frame(maxWidth: 280)
+                Spacer(minLength: 0)
+                Text("\(entryCount)")
+                    .font(.system(size: 12, weight: .semibold).monospacedDigit())
+                    .foregroundStyle(Theme.muted)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(Theme.surfaceSubtle, in: Capsule())
             }
 
-            if section == .words {
-                if viewModel.filteredTerms.isEmpty {
-                    emptyEntries("No saved words", "Add names, acronyms and specialist terms you want spelled exactly.")
-                } else {
-                    VStack(spacing: 0) {
-                        ForEach(viewModel.filteredTerms) { term in
-                            MemoryTermRow(term: term) { viewModel.removeTerm(id: term.id) }
+            switch section {
+            case .words:
+                entriesList(
+                    emptyTitle: "No words yet",
+                    emptyDetail: "Add names and specialist terms you want spelled exactly."
+                ) {
+                    ForEach(viewModel.filteredTerms) { term in
+                        MemoryTermRow(term: term) {
+                            viewModel.removeTerm(id: term.id)
+                            toasts.show("Word removed", kind: .info)
                         }
                     }
                 }
-            } else if viewModel.filteredReplacements.isEmpty {
-                emptyEntries("No auto-corrections", "Add a correction when Sadaa repeatedly hears the wrong phrase.")
-            } else {
-                VStack(spacing: 0) {
+            case .corrections:
+                entriesList(
+                    emptyTitle: "No auto-corrections yet",
+                    emptyDetail: "Teach a mistake once. Sadaa fixes it on every future dictation."
+                ) {
                     ForEach(viewModel.filteredReplacements) { rule in
                         ReplacementRuleRow(
                             rule: rule,
                             onToggleEnabled: {
-                                viewModel.setReplacementEnabled(rule.id, isEnabled: !rule.isEnabled)
+                                let next = !rule.isEnabled
+                                viewModel.setReplacementEnabled(rule.id, isEnabled: next)
+                                toasts.show(next ? "Correction resumed" : "Correction paused", kind: .info)
                             },
-                            onDelete: { viewModel.removeReplacement(id: rule.id) }
+                            onDelete: {
+                                viewModel.removeReplacement(id: rule.id)
+                                toasts.show("Correction removed", kind: .info)
+                            }
                         )
                     }
                 }
+            case .shortcuts:
+                shortcutsContent
             }
+        }
+        .padding(18)
+        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).strokeBorder(Theme.line, lineWidth: 1))
+    }
+
+    private var entryCount: Int {
+        switch section {
+        case .words: return viewModel.filteredTerms.count
+        case .corrections: return viewModel.filteredReplacements.count
+        case .shortcuts: return viewModel.filteredSnippets.count
         }
     }
 
-    private var shortcuts: some View {
-        DisclosureGroup("Text shortcuts") {
-            VStack(alignment: .leading, spacing: 12) {
-                Text("Say a short trigger and expand it into reusable text. This is optional and stays out of the main dictionary workflow.")
+    @ViewBuilder
+    private func entriesList<Content: View>(
+        emptyTitle: String,
+        emptyDetail: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        if entryCount == 0 && viewModel.query.isEmpty {
+            CommandEmptyState(icon: "character.book.closed", title: emptyTitle, detail: emptyDetail)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 8)
+        } else if entryCount == 0 {
+            CommandEmptyState(
+                icon: "magnifyingglass",
+                title: "No matches",
+                detail: "Try a shorter word or a different spelling."
+            )
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 8)
+        } else {
+            VStack(spacing: 0) {
+                content()
+            }
+            .background(Theme.surfaceSubtle.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+            .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.line, lineWidth: 1))
+            .clipShape(RoundedRectangle(cornerRadius: 10))
+        }
+    }
+
+    private var shortcutsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Say a short trigger to expand reusable text.")
+                .font(.system(size: 12))
+                .foregroundStyle(Theme.muted)
+
+            HStack(spacing: 8) {
+                TextField("Trigger", text: $snippetTrigger).premiumInputChrome()
+                TextField("Expanded text", text: $snippetExpansion).premiumInputChrome()
+                Button("Add") {
+                    viewModel.addSnippet(trigger: snippetTrigger, expansion: snippetExpansion)
+                    snippetTrigger = ""
+                    snippetExpansion = ""
+                    toasts.show("Shortcut saved")
+                }
+                .buttonStyle(.borderedProminent)
+                .tint(Theme.brand)
+                .clickableCursor()
+                .disabled(snippetTrigger.isEmpty || snippetExpansion.isEmpty)
+            }
+
+            if viewModel.filteredSnippets.isEmpty {
+                Text(viewModel.query.isEmpty ? "No shortcuts yet." : "No matching shortcuts.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
-
-                HStack(spacing: 10) {
-                    TextField("Trigger", text: $snippetTrigger).premiumInputChrome()
-                    TextField("Expanded text", text: $snippetExpansion).premiumInputChrome()
-                    Button("Add shortcut") {
-                        viewModel.addSnippet(trigger: snippetTrigger, expansion: snippetExpansion)
-                        snippetTrigger = ""
-                        snippetExpansion = ""
+                    .padding(.vertical, 8)
+            } else {
+                VStack(spacing: 0) {
+                    ForEach(viewModel.filteredSnippets) { snippet in
+                        MemorySnippetRow(
+                            snippet: snippet,
+                            onToggleEnabled: {
+                                let next = !snippet.isEnabled
+                                viewModel.setSnippetEnabled(snippet.id, isEnabled: next)
+                                toasts.show(next ? "Shortcut resumed" : "Shortcut paused", kind: .info)
+                            },
+                            onDelete: {
+                                viewModel.removeSnippet(id: snippet.id)
+                                toasts.show("Shortcut removed", kind: .info)
+                            }
+                        )
+                        .padding(.horizontal, 12)
+                        .overlay(alignment: .bottom) { Rectangle().fill(Theme.line).frame(height: 1) }
                     }
-                    .buttonStyle(.bordered)
-                    .tint(Theme.brand)
-                    .clickableCursor()
-                    .disabled(snippetTrigger.isEmpty || snippetExpansion.isEmpty)
                 }
-
-                ForEach(viewModel.filteredSnippets) { snippet in
-                    MemorySnippetRow(
-                        snippet: snippet,
-                        onToggleEnabled: {
-                            viewModel.setSnippetEnabled(snippet.id, isEnabled: !snippet.isEnabled)
-                        },
-                        onDelete: { viewModel.removeSnippet(id: snippet.id) }
-                    )
-                }
+                .background(Theme.surfaceSubtle.opacity(0.55), in: RoundedRectangle(cornerRadius: 10))
+                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(Theme.line, lineWidth: 1))
             }
-            .padding(.top, 12)
         }
-        .font(.system(size: 13, weight: .semibold))
-        .foregroundStyle(Theme.ink)
-        .padding(16)
-        .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
     }
+
+    // MARK: - Import
 
     private var importSheet: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text("Import dictionary")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.ink)
-            Picker("Format", selection: $importKind) {
-                ForEach(ImportKind.allCases) { kind in Text(kind.title).tag(kind) }
-            }
-            .pickerStyle(.segmented)
-            .tint(Theme.brand)
-            .clickableCursor()
+
+            BrandedSegmentedControl(
+                selection: $importKind,
+                options: ImportKind.allCases.map { ($0.title, $0) }
+            )
 
             TextEditor(text: $importText)
                 .font(.system(size: 12, design: .monospaced))
@@ -369,40 +398,48 @@ struct LanguageMemoryPage: View {
         .background(Theme.surface)
     }
 
-    private func emptyEntries(_ title: String, _ detail: String) -> some View {
-        CommandEmptyState(icon: "character.book.closed", title: title, detail: detail)
-            .background(Theme.surface, in: RoundedRectangle(cornerRadius: 12))
-            .overlay(RoundedRectangle(cornerRadius: 12).strokeBorder(Theme.line, lineWidth: 1))
+    // MARK: - Actions
+
+    private func label(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundStyle(Theme.muted)
     }
 
     private func addWord() {
+        let phrase = word.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !phrase.isEmpty else { return }
+        let pronunciations = split(soundsLike)
         viewModel.addTerm(
-            phrase: word,
-            pronunciations: split(pronunciations),
-            aliases: split(aliases),
-            priority: priority,
-            language: wordLanguage,
-            notes: notes
+            phrase: phrase,
+            pronunciations: pronunciations,
+            aliases: [],
+            priority: .high,
+            language: .auto,
+            notes: ""
         )
         word = ""
-        pronunciations = ""
-        aliases = ""
-        notes = ""
-        priority = .high
-        wordLanguage = .auto
+        soundsLike = ""
+        section = .words
+        if pronunciations.isEmpty {
+            toasts.show("Added “\(phrase)”")
+        } else {
+            toasts.show("Added “\(phrase)” with sound-alike fixes")
+        }
     }
 
     private func addCorrection() {
-        viewModel.addReplacement(
-            match: heard,
-            replacement: replacement,
-            mode: matchMode,
-            language: replacementLanguage
-        )
+        let result = viewModel.learnCorrection(observed: heard, corrected: replacement)
+        guard !result.pairs.isEmpty else { return }
         heard = ""
         replacement = ""
-        matchMode = .wordBoundaryPhrase
-        replacementLanguage = .auto
+        section = .corrections
+        let n = result.replacementCount
+        if n == 0 {
+            toasts.show("Saved as a dictionary word")
+        } else {
+            toasts.show(n == 1 ? "Correction learned" : "\(n) corrections learned")
+        }
     }
 
     private func performImport() {
@@ -413,10 +450,13 @@ struct LanguageMemoryPage: View {
                 return
             }
             importMessage = resultMessage(result)
+            toasts.show("Dictionary imported")
         case .wordsCSV:
             importMessage = resultMessage(viewModel.importTermsCSV(importText))
+            toasts.show("Words imported")
         case .correctionsCSV:
             importMessage = resultMessage(viewModel.importReplacementsCSV(importText))
+            toasts.show("Corrections imported")
         }
     }
 
@@ -428,16 +468,23 @@ struct LanguageMemoryPage: View {
         value.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
     }
 
-    private func copy(_ value: String) {
+    private func copy(_ value: String, toast: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(value, forType: .string)
+        toasts.show(toast)
     }
 }
 
 private enum DictionarySection: String, CaseIterable, Identifiable {
-    case words, corrections
+    case words, corrections, shortcuts
     var id: String { rawValue }
-    var title: String { self == .words ? "Words and names" : "Auto-corrections" }
+    var title: String {
+        switch self {
+        case .words: return "Words"
+        case .corrections: return "Fixes"
+        case .shortcuts: return "Shortcuts"
+        }
+    }
 }
 
 private enum ImportKind: String, CaseIterable, Identifiable {
@@ -445,9 +492,9 @@ private enum ImportKind: String, CaseIterable, Identifiable {
     var id: String { rawValue }
     var title: String {
         switch self {
-        case .json: return "Full backup"
+        case .json: return "Backup"
         case .wordsCSV: return "Words CSV"
-        case .correctionsCSV: return "Corrections CSV"
+        case .correctionsCSV: return "Fixes CSV"
         }
     }
 }

@@ -4,6 +4,7 @@ import SadaaCore
 
 struct HistoryPage: View {
     @ObservedObject var viewModel: SadaaViewModel
+    @EnvironmentObject private var toasts: AppToastCenter
 
     @State private var query = ""
     @State private var selectedID: UUID?
@@ -42,6 +43,7 @@ struct HistoryPage: View {
                 viewModel.historyStore.clear()
                 selectedID = nil
                 viewModel.refreshRecent()
+                toasts.show("Library cleared", kind: .info)
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -53,16 +55,10 @@ struct HistoryPage: View {
             title: "Library",
             subtitle: "Search, copy and improve your previous dictations. Everything stays local on this Mac."
         ) {
-            Menu {
+            BrandedMenuButton(help: "Library options") {
                 Button("Delete all transcripts", role: .destructive) { showClearConfirm = true }
                     .disabled(viewModel.historyStore.all().isEmpty)
-            } label: {
-                Image(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 34)
-            .help("Library options")
-            .clickableCursor()
         }
     }
 
@@ -215,14 +211,20 @@ struct HistoryPage: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.brand)
                 .clickableCursor()
-            Button("Send to notes") { viewModel.sendToScratchpad(record) }
-                .buttonStyle(.bordered)
-                .tint(Theme.brand)
-                .clickableCursor()
-            Button("Reprocess") { viewModel.reprocessHistoryWithLanguageMemory(record) }
-                .buttonStyle(.bordered)
-                .tint(Theme.brand)
-                .clickableCursor()
+            Button("Send to notes") {
+                viewModel.sendToScratchpad(record)
+                toasts.show("Sent to notes")
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.brand)
+            .clickableCursor()
+            Button("Reprocess") {
+                viewModel.reprocessHistoryWithLanguageMemory(record)
+                toasts.show("Reprocessing…", kind: .info)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.brand)
+            .clickableCursor()
             Button("Delete", role: .destructive) { delete(record) }
                 .buttonStyle(.borderless)
                 .clickableCursor()
@@ -264,11 +266,15 @@ struct HistoryPage: View {
     }
 
     private func correctionSheet(_ record: DictationRecord) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Learn a correction")
+        let preview = viewModel.languageMemory.previewLearnCorrection(
+            observed: correctionObserved,
+            corrected: correctionCorrected
+        )
+        return VStack(alignment: .leading, spacing: 18) {
+            Text("Teach the dictionary")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.ink)
-            Text("Save what Sadaa heard and the spelling you want next time.")
+            Text("Edit the mistake and the spelling you want. Sadaa learns auto-corrections so the same error is fixed next time.")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.muted)
 
@@ -280,21 +286,57 @@ struct HistoryPage: View {
                 Text("Write instead").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted)
                 TextField("Correct spelling", text: $correctionCorrected).premiumInputChrome()
             }
+
+            if !preview.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Will learn")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                    ForEach(Array(preview.enumerated()), id: \.offset) { _, pair in
+                        HStack(spacing: 8) {
+                            Text(pair.observed)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Theme.ink)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.muted)
+                            Text(pair.corrected)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.brand)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel") { correctionRecord = nil }
                     .clickableCursor()
-                Button("Save correction") {
-                    viewModel.languageMemory.learnCorrection(
+                Button("Save and learn") {
+                    let result = viewModel.languageMemory.learnCorrection(
                         observed: correctionObserved,
                         corrected: correctionCorrected
                     )
+                    viewModel.refreshLanguageMemory()
                     correctionRecord = nil
+                    if result.pairs.isEmpty {
+                        toasts.show("Nothing new to learn", kind: .info)
+                    } else {
+                        toasts.show(result.replacementCount <= 1
+                                    ? "Correction learned"
+                                    : "\(result.replacementCount) corrections learned")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.brand)
                 .clickableCursor()
-                .disabled(correctionObserved.isEmpty || correctionCorrected.isEmpty)
+                .disabled(
+                    correctionObserved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || correctionCorrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
         }
         .padding(24)
@@ -303,8 +345,18 @@ struct HistoryPage: View {
     }
 
     private func beginCorrection(_ record: DictationRecord) {
-        correctionObserved = record.rawText ?? record.text
-        correctionCorrected = record.text
+        // Prefer a short teaching pair: if raw differs from final, start from
+        // that. Otherwise put the final text in both fields so the user can
+        // edit only the wrong span.
+        let raw = record.rawText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let final = record.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty, raw != final {
+            correctionObserved = raw
+            correctionCorrected = final
+        } else {
+            correctionObserved = final
+            correctionCorrected = final
+        }
         correctionRecord = record
     }
 
@@ -312,11 +364,13 @@ struct HistoryPage: View {
         viewModel.historyStore.delete(id: record.id)
         if selectedID == record.id { selectedID = nil }
         viewModel.refreshRecent()
+        toasts.show("Transcript deleted", kind: .info)
     }
 
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        toasts.show("Copied")
     }
 
     private func grouped(_ records: [DictationRecord]) -> [(day: Date, records: [DictationRecord])] {

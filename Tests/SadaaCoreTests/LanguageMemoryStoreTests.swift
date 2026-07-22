@@ -122,6 +122,38 @@ import Foundation
         }
     }
 
+    @Test func testLearnFromEditPersistsRuleTermAndAppliesNextTime() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = LanguageMemoryStore(fileURL: url)
+
+        let learned = store.learnFromEdit(
+            original: "Please open cloud code",
+            corrected: "Please open Claude Code"
+        )
+        #expect(!learned.pairs.isEmpty)
+        #expect(!store.replacements().isEmpty)
+        #expect(store.terms().contains { $0.phrase == "Claude Code" || $0.phrase == "Claude" })
+
+        let processed = LanguageMemoryPostProcessor.rawResult(
+            for: "I use cloud code daily",
+            snapshot: store.snapshot(),
+            language: .en
+        )
+        #expect(processed.text.contains("Claude Code") || processed.text.contains("Claude"))
+    }
+
+    @Test func testUpsertTermMergesPronunciationsAndKeepsStableID() {
+        let url = tempFile()
+        defer { try? FileManager.default.removeItem(at: url) }
+        let store = LanguageMemoryStore(fileURL: url)
+        let first = store.upsertTerm(MemoryTerm(phrase: "Sadaa", pronunciations: ["sada"]))
+        let second = store.upsertTerm(MemoryTerm(phrase: "Sadaa", pronunciations: ["sa da"]))
+        #expect(store.terms().count == 1)
+        #expect(second.id == first.id)
+        #expect(Set(second.pronunciations) == Set(["sada", "sa da"]))
+    }
+
     @Test func testCorruptFileRecoversWithBackup() throws {
         let url = tempFile()
         defer {

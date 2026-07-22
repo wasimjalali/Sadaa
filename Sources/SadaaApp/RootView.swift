@@ -37,6 +37,7 @@ struct RootView: View {
     let settings: AppSettings
 
     @State private var selection: SidebarSection = .home
+    @StateObject private var toasts = AppToastCenter()
 
     var body: some View {
         NavigationSplitView {
@@ -45,7 +46,9 @@ struct RootView: View {
             detail
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.surface)
+                .overlay { PremiumToastHost() }
         }
+        .environmentObject(toasts)
         // Sadaa wears a fixed light cream/navy brand. Pin the window to the
         // light scheme so default text resolves dark and stays readable on
         // cream even when macOS is in Dark Mode.
