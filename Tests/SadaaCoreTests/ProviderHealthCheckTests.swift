@@ -21,11 +21,12 @@ private struct HealthFakeProvider: TranscriptionProvider {
     }
 
     @Test func testSanitizeRemovesKeysAndBearerTokens() {
-        let message = #"api-key: abc123 Bearer token.secret Ocp-Apim-Subscription-Key="speech""#
+        let message = #"api-key: abc123 Bearer token.secret Ocp-Apim-Subscription-Key="speech" Token dg_deadbeef123"#
         let sanitized = ProviderHealthCheck.sanitize(message)
         #expect(!sanitized.contains("abc123"))
         #expect(!sanitized.contains("token.secret"))
         #expect(!sanitized.contains("speech"))
+        #expect(!sanitized.contains("dg_deadbeef123"))
     }
 
     @Test func testHealthCheckSuccessReportsLatencyAndRedactedEndpoint() async {

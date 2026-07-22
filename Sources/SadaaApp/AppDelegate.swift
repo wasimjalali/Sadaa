@@ -591,9 +591,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.setSubmenu(languageMenu, for: languageItem)
         menu.addItem(languageItem)
 
-        // Quick literal-dictation switch. When off, dictations are pure
-        // transcription with no GPT in the loop, so they can never take action.
-        let formattingItem = NSMenuItem(title: "Smart formatting",
+        // Quick auto-format switch, mirrors the Settings toggle. When off,
+        // Deepgram's smart_format is disabled and transcripts come back raw.
+        let formattingItem = NSMenuItem(title: "Auto-format transcript",
                                         action: #selector(toggleSmartFormatting),
                                         keyEquivalent: "")
         formattingItem.target = self
@@ -627,8 +627,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleSmartFormatting() {
-        // Off = pure transcription, no GPT, so dictation can never take action.
-        // Takes effect on the next dictation (the formatter is built per use).
+        // Off = raw transcript, Deepgram's smart_format is disabled.
+        // Takes effect on the next dictation (the provider is built per use).
         settings.formattingEnabled.toggle()
         formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
     }

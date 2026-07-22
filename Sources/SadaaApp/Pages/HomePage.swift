@@ -73,7 +73,7 @@ struct HomePage: View {
                     .foregroundStyle(Theme.ink)
                 Text(viewModel.providerConfigured
                      ? "\(viewModel.providerName) is connected"
-                     : "Open Settings and add Azure OpenAI or an OpenAI-compatible endpoint.")
+                     : "Open Settings and add your Deepgram API key.")
                     .font(.system(size: 12))
                     .foregroundStyle(Theme.muted)
             }

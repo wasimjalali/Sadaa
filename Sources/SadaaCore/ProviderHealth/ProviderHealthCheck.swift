@@ -98,6 +98,8 @@ public enum ProviderHealthCheck {
             #"api-key["']?\s*[:=]\s*["']?[^"',\s]+"#,
             #"Ocp-Apim-Subscription-Key["']?\s*[:=]\s*["']?[^"',\s]+"#,
             #"Bearer\s+[A-Za-z0-9._\-]+"#,
+            // Deepgram uses "Authorization: Token <key>".
+            #"Token\s+[A-Za-z0-9._\-]+"#,
         ]
         for pattern in keyPatterns {
             sanitized = sanitized.replacingOccurrences(

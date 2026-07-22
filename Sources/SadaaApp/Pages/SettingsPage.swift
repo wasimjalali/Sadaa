@@ -332,9 +332,9 @@ struct SettingsPage: View {
         settings.soundEffectsEnabled = soundEffectsEnabled
 
         do {
-            if !deepgramKey.isEmpty {
-                try Keychain.set(deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines),
-                                 account: "deepgram-key")
+            let trimmedKey = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedKey.isEmpty {
+                try Keychain.set(trimmedKey, account: "deepgram-key")
                 hasDeepgramKey = true
                 deepgramKey = ""
             }
