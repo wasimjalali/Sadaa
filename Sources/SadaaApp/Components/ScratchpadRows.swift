@@ -38,12 +38,12 @@ struct ScratchpadNoteRow: View {
             .padding(10)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: 9)
                     .fill(isSelected ? Theme.surface : Color.clear)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
-                    .strokeBorder(isSelected ? Theme.line : Color.clear,
+                RoundedRectangle(cornerRadius: 9)
+                    .strokeBorder(isSelected ? Theme.brand.opacity(0.22) : Color.clear,
                                   lineWidth: 1)
             )
         }

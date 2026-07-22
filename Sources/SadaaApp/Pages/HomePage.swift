@@ -25,6 +25,7 @@ enum PageFormat {
 
 struct HomePage: View {
     @ObservedObject var viewModel: SadaaViewModel
+    @EnvironmentObject private var toasts: AppToastCenter
 
     var body: some View {
         ScrollView {
@@ -130,9 +131,12 @@ struct HomePage: View {
                             .font(.system(size: 11))
                             .foregroundStyle(Theme.muted)
                         Spacer()
-                        Button("Send to notes") { viewModel.sendToScratchpad(latest) }
-                            .buttonStyle(.borderless)
-                            .clickableCursor()
+                        Button("Send to notes") {
+                            viewModel.sendToScratchpad(latest)
+                            toasts.show("Sent to notes")
+                        }
+                        .buttonStyle(.borderless)
+                        .clickableCursor()
                         Button("Copy") { copy(latest.text) }
                             .buttonStyle(.bordered)
                             .tint(Theme.brand)
@@ -231,5 +235,6 @@ struct HomePage: View {
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        toasts.show("Copied")
     }
 }

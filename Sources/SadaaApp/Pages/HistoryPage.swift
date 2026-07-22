@@ -4,6 +4,7 @@ import SadaaCore
 
 struct HistoryPage: View {
     @ObservedObject var viewModel: SadaaViewModel
+    @EnvironmentObject private var toasts: AppToastCenter
 
     @State private var query = ""
     @State private var selectedID: UUID?
@@ -42,6 +43,7 @@ struct HistoryPage: View {
                 viewModel.historyStore.clear()
                 selectedID = nil
                 viewModel.refreshRecent()
+                toasts.show("Library cleared", kind: .info)
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -53,16 +55,10 @@ struct HistoryPage: View {
             title: "Library",
             subtitle: "Search, copy and improve your previous dictations. Everything stays local on this Mac."
         ) {
-            Menu {
+            BrandedMenuButton(help: "Library options") {
                 Button("Delete all transcripts", role: .destructive) { showClearConfirm = true }
                     .disabled(viewModel.historyStore.all().isEmpty)
-            } label: {
-                Image(systemName: "ellipsis.circle")
             }
-            .menuStyle(.borderlessButton)
-            .frame(width: 34)
-            .help("Library options")
-            .clickableCursor()
         }
     }
 
@@ -215,14 +211,20 @@ struct HistoryPage: View {
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.brand)
                 .clickableCursor()
-            Button("Send to notes") { viewModel.sendToScratchpad(record) }
-                .buttonStyle(.bordered)
-                .tint(Theme.brand)
-                .clickableCursor()
-            Button("Reprocess") { viewModel.reprocessHistoryWithLanguageMemory(record) }
-                .buttonStyle(.bordered)
-                .tint(Theme.brand)
-                .clickableCursor()
+            Button("Send to notes") {
+                viewModel.sendToScratchpad(record)
+                toasts.show("Sent to notes")
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.brand)
+            .clickableCursor()
+            Button("Reprocess") {
+                viewModel.reprocessHistoryWithLanguageMemory(record)
+                toasts.show("Reprocessing…", kind: .info)
+            }
+            .buttonStyle(.bordered)
+            .tint(Theme.brand)
+            .clickableCursor()
             Button("Delete", role: .destructive) { delete(record) }
                 .buttonStyle(.borderless)
                 .clickableCursor()
@@ -314,12 +316,19 @@ struct HistoryPage: View {
                 Button("Cancel") { correctionRecord = nil }
                     .clickableCursor()
                 Button("Save and learn") {
-                    viewModel.languageMemory.learnCorrection(
+                    let result = viewModel.languageMemory.learnCorrection(
                         observed: correctionObserved,
                         corrected: correctionCorrected
                     )
                     viewModel.refreshLanguageMemory()
                     correctionRecord = nil
+                    if result.pairs.isEmpty {
+                        toasts.show("Nothing new to learn", kind: .info)
+                    } else {
+                        toasts.show(result.replacementCount <= 1
+                                    ? "Correction learned"
+                                    : "\(result.replacementCount) corrections learned")
+                    }
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.brand)
@@ -355,11 +364,13 @@ struct HistoryPage: View {
         viewModel.historyStore.delete(id: record.id)
         if selectedID == record.id { selectedID = nil }
         viewModel.refreshRecent()
+        toasts.show("Transcript deleted", kind: .info)
     }
 
     private func copy(_ text: String) {
         NSPasteboard.general.clearContents()
         NSPasteboard.general.setString(text, forType: .string)
+        toasts.show("Copied")
     }
 
     private func grouped(_ records: [DictationRecord]) -> [(day: Date, records: [DictationRecord])] {
