@@ -396,7 +396,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     /// Active transcription provider: Deepgram Nova-3, keyed from the Keychain.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        guard let key = Keychain.get(account: "deepgram-key"), !key.isEmpty else {
+        guard let key = Keychain.get(account: "deepgram-key")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty else {
             return []
         }
         return [DeepgramProvider(config: .init(
