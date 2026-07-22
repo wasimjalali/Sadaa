@@ -60,7 +60,7 @@ public final class DictationController {
                 rawTransform: ((String, FormattingContext) async -> FormattingResult)? = nil,
                 context: @escaping () -> FormattingContext = {
                     FormattingContext(appBundleID: nil, dictionaryWords: [],
-                                      speakerContext: "", language: .auto)
+                                      language: .auto)
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
                 formatterUnavailable: @escaping () -> Void = {},
@@ -180,8 +180,8 @@ public final class DictationController {
             state = .error("No speech detected.")
             return
         }
-        // Wall-clock recording length. The Azure json response carries no
-        // duration, so this is the cost meter's only signal on the default path.
+        // Wall-clock recording length, used as the duration when the provider
+        // response omits one.
         let measuredDuration = recordingStartedAt.map { max(0, now().timeIntervalSince($0)) }
         await process(audioURL: audioURL, measuredDuration: measuredDuration)
     }
@@ -320,7 +320,8 @@ public final class DictationController {
             // 429 insufficient_quota, 400 "audio file is too short") is
             // distinguishable from an opaque "HTTP 400". Without this, every
             // cause collapsed to the same message and couldn't be diagnosed.
-            let detail = body.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)
+            let detail = ProviderHealthCheck.sanitize(
+                body.trimmingCharacters(in: .whitespacesAndNewlines)).prefix(200)
             return detail.isEmpty ? "HTTP \(status) from provider"
                                   : "HTTP \(status): \(detail)"
         case .badResponse: return "unreadable provider response"

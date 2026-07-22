@@ -7,8 +7,6 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
     public let language: String?
     public let provider: String
     public let durationSeconds: Double?
-    /// Credit-awareness estimate. Optional so pre-cost history.json still decodes.
-    public let estimatedCost: Double?
     /// How the text was produced (raw or formatted). Optional so pre-mode
     /// history.json still decodes.
     public let mode: FormattingMode?
@@ -26,7 +24,7 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
 
     public init(id: UUID = UUID(), text: String, createdAt: Date,
                 language: String?, provider: String, durationSeconds: Double?,
-                estimatedCost: Double? = nil, mode: FormattingMode? = nil,
+                mode: FormattingMode? = nil,
                 rawText: String? = nil,
                 intermediateText: String? = nil,
                 modelDeployment: String? = nil,
@@ -40,7 +38,6 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
         self.language = language
         self.provider = provider
         self.durationSeconds = durationSeconds
-        self.estimatedCost = estimatedCost
         self.mode = mode
         self.rawText = rawText
         self.intermediateText = intermediateText
@@ -49,17 +46,5 @@ public struct DictationRecord: Codable, Equatable, Identifiable, Sendable {
         self.replacementRuleIDs = replacementRuleIDs
         self.snippetIDs = snippetIDs
         self.audioPath = audioPath
-    }
-
-    public func withEstimatedCost(_ cost: Double?) -> DictationRecord {
-        DictationRecord(id: id, text: text, createdAt: createdAt, language: language,
-                        provider: provider, durationSeconds: durationSeconds,
-                        estimatedCost: cost, mode: mode, rawText: rawText,
-                        intermediateText: intermediateText,
-                        modelDeployment: modelDeployment,
-                        memoryHitIDs: memoryHitIDs,
-                        replacementRuleIDs: replacementRuleIDs,
-                        snippetIDs: snippetIDs,
-                        audioPath: audioPath)
     }
 }

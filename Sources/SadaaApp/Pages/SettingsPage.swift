@@ -6,24 +6,12 @@ struct SettingsPage: View {
     let settings: AppSettings
     @ObservedObject var viewModel: SadaaViewModel
 
-    @State private var providerKind: SpeechProviderKind = .azureOpenAI
-    @State private var azureEndpoint = ""
-    @State private var azureDeployment = ""
-    @State private var azureAPIVersion = ""
-    @State private var azureKey = ""
-    @State private var compatibleEndpoint = ""
-    @State private var compatibleModel = ""
-    @State private var compatibleKey = ""
-    @State private var hasAzureKey = false
-    @State private var hasCompatibleKey = false
-
+    @State private var deepgramKey = ""
+    @State private var hasDeepgramKey = false
     @State private var formattingEnabled = true
-    @State private var gptDeployment = ""
-    @State private var speakerContext = ""
+
     @State private var silenceTimeout = 60.0
     @State private var recordingsToKeep = 10
-    @State private var transcriptionRate = "0.006"
-    @State private var formatterRate = "0.002"
     @State private var soundEffectsEnabled = true
     @State private var launchAtLogin = false
 
@@ -32,6 +20,9 @@ struct SettingsPage: View {
     @State private var isTesting = false
     @State private var testResult: ProviderHealthResult?
 
+    /// The Deepgram listen endpoint, shown (redacted) in the connection test.
+    private let deepgramEndpoint = "https://api.deepgram.com/v1/listen"
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 22) {
@@ -39,7 +30,6 @@ struct SettingsPage: View {
                 statusLine
                 generalSection
                 speechSection
-                writingSection
                 dataSection
             }
             .padding(32)
@@ -155,106 +145,31 @@ struct SettingsPage: View {
 
     private var speechSection: some View {
         settingsSection(
-            title: "Speech provider",
-            detail: "Connect Azure OpenAI or any standard OpenAI-compatible Whisper endpoint."
+            title: "Speech",
+            detail: "Sadaa transcribes with Deepgram Nova-3. Your key is stored in the macOS Keychain."
         ) {
             VStack(alignment: .leading, spacing: 16) {
-                Picker("Provider", selection: $providerKind) {
-                    Text("Azure OpenAI").tag(SpeechProviderKind.azureOpenAI)
-                    Text("OpenAI-compatible").tag(SpeechProviderKind.openAICompatible)
-                }
-                .pickerStyle(.segmented)
-                .frame(maxWidth: 420)
-                .tint(Theme.brand)
-                .clickableCursor()
+                secretField(
+                    title: "Deepgram API key",
+                    placeholder: hasDeepgramKey
+                        ? "Saved in Keychain. Enter a new key to replace it."
+                        : "Enter your Deepgram API key",
+                    value: $deepgramKey,
+                    hasSavedValue: hasDeepgramKey,
+                    clear: {
+                        Keychain.delete(account: "deepgram-key")
+                        hasDeepgramKey = false
+                        viewModel.refreshConfig()
+                    }
+                )
 
-                if providerKind == .azureOpenAI {
-                    azureFields
-                } else {
-                    compatibleFields
-                }
-            }
-        }
-    }
+                Divider().overlay(Theme.line)
 
-    private var azureFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            field("Endpoint", "https://your-resource.openai.azure.com", $azureEndpoint)
-            ViewThatFits(in: .horizontal) {
-                HStack(spacing: 12) {
-                    field("Transcription deployment", "gpt-4o-mini-transcribe", $azureDeployment)
-                    field("API version", "2025-03-01-preview", $azureAPIVersion)
-                }
-                VStack(spacing: 12) {
-                    field("Transcription deployment", "gpt-4o-mini-transcribe", $azureDeployment)
-                    field("API version", "2025-03-01-preview", $azureAPIVersion)
-                }
-            }
-            secretField(
-                title: "API key",
-                placeholder: hasAzureKey ? "Saved in Keychain. Enter a new key to replace it." : "Enter Azure API key",
-                value: $azureKey,
-                hasSavedValue: hasAzureKey,
-                clear: {
-                    Keychain.delete(account: "azure-openai-key")
-                    hasAzureKey = false
-                    viewModel.refreshConfig()
-                }
-            )
-        }
-    }
-
-    private var compatibleFields: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            field("Base URL", "https://api.openai.com or http://127.0.0.1:8080", $compatibleEndpoint)
-            field("Model", "whisper-1", $compatibleModel)
-            secretField(
-                title: "Bearer token",
-                placeholder: hasCompatibleKey ? "Saved in Keychain. Enter a new token to replace it." : "Optional for local endpoints",
-                value: $compatibleKey,
-                hasSavedValue: hasCompatibleKey,
-                clear: {
-                    Keychain.delete(account: "openai-compatible-key")
-                    hasCompatibleKey = false
-                    viewModel.refreshConfig()
-                }
-            )
-            Text("Sadaa sends standard multipart requests to /v1/audio/transcriptions. This works with OpenAI-compatible hosted and self-hosted Whisper services.")
-                .font(.system(size: 11))
-                .foregroundStyle(Theme.muted)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    private var writingSection: some View {
-        settingsSection(
-            title: "Writing",
-            detail: "Optional cleanup after transcription. Dictionary corrections still work when this is off."
-        ) {
-            VStack(alignment: .leading, spacing: 16) {
-                settingsRow("Clean up punctuation and formatting", detail: "Uses your Azure GPT deployment when configured") {
+                settingsRow(
+                    "Auto-format transcript",
+                    detail: "Adds punctuation, capitalization and formatted numbers"
+                ) {
                     Toggle("", isOn: $formattingEnabled).labelsHidden()
-                }
-
-                if formattingEnabled {
-                    field("Azure GPT deployment", "gpt-4o-mini", $gptDeployment)
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text("Writing context")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(Theme.ink)
-                        TextEditor(text: $speakerContext)
-                            .font(.system(size: 13))
-                            .scrollContentBackground(.hidden)
-                            .padding(10)
-                            .frame(minHeight: 100)
-                            .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 9))
-                            .overlay(RoundedRectangle(cornerRadius: 9).strokeBorder(Theme.line, lineWidth: 1))
-                    }
-                    if providerKind == .openAICompatible {
-                        Text("Text cleanup currently uses Azure OpenAI. Leave it off if you only want your OpenAI-compatible speech endpoint and local dictionary corrections.")
-                            .font(.system(size: 11))
-                            .foregroundStyle(Theme.muted)
-                    }
                 }
             }
         }
@@ -263,7 +178,7 @@ struct SettingsPage: View {
     private var dataSection: some View {
         settingsSection(
             title: "Data and recording",
-            detail: "Control local retention, silence detection and optional cost estimates."
+            detail: "Control local retention and silence detection."
         ) {
             VStack(spacing: 16) {
                 settingsRow("Stop after silence", detail: "Automatically finish a recording after this many seconds") {
@@ -279,29 +194,6 @@ struct SettingsPage: View {
                 settingsRow("Keep recordings", detail: "Retained audio enables retry and reprocessing") {
                     Stepper("\(recordingsToKeep)", value: $recordingsToKeep, in: 0...50)
                         .frame(width: 110)
-                }
-
-                Divider().overlay(Theme.line)
-
-                ViewThatFits(in: .horizontal) {
-                    HStack(spacing: 12) {
-                        field("Transcription estimate per minute", "0.006", $transcriptionRate)
-                        field("Cleanup estimate per 1,000 characters", "0.002", $formatterRate)
-                    }
-                    VStack(spacing: 12) {
-                        field("Transcription estimate per minute", "0.006", $transcriptionRate)
-                        field("Cleanup estimate per 1,000 characters", "0.002", $formatterRate)
-                    }
-                }
-
-                HStack {
-                    Text("This month")
-                        .font(.system(size: 12, weight: .medium))
-                        .foregroundStyle(Theme.ink)
-                    Spacer()
-                    Text("\(PageFormat.minutes(viewModel.monthlyCost.minutes)) · \(PageFormat.dollars(viewModel.monthlyCost.cost)) estimated")
-                        .font(.system(size: 12).monospacedDigit())
-                        .foregroundStyle(Theme.muted)
                 }
             }
         }
@@ -346,16 +238,6 @@ struct SettingsPage: View {
             Spacer(minLength: 20)
             accessory()
         }
-    }
-
-    private func field(_ title: String, _ placeholder: String, _ value: Binding<String>) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(Theme.ink)
-            TextField(placeholder, text: value).premiumInputChrome()
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private func secretField(
@@ -432,21 +314,10 @@ struct SettingsPage: View {
     }
 
     private func load() {
-        providerKind = settings.speechProviderKind
-        azureEndpoint = settings.azureEndpoint
-        azureDeployment = settings.azureDeployment
-        azureAPIVersion = settings.azureAPIVersion
-        compatibleEndpoint = settings.compatibleEndpoint
-        compatibleModel = settings.compatibleModel
-        hasAzureKey = Keychain.exists(account: "azure-openai-key")
-        hasCompatibleKey = Keychain.exists(account: "openai-compatible-key")
+        hasDeepgramKey = Keychain.exists(account: "deepgram-key")
         formattingEnabled = settings.formattingEnabled
-        gptDeployment = settings.gptDeployment
-        speakerContext = settings.speakerContext
         silenceTimeout = settings.silenceTimeout
         recordingsToKeep = settings.recordingsToKeep
-        transcriptionRate = String(settings.transcriptionRatePerMinute)
-        formatterRate = String(settings.formatterRatePer1kChars)
         soundEffectsEnabled = settings.soundEffectsEnabled
         launchAtLogin = LoginItem.isEnabled
     }
@@ -455,43 +326,19 @@ struct SettingsPage: View {
         saveMessage = ""
         saveIsError = false
 
-        guard let transcriptionRateValue = decimal(transcriptionRate),
-              let formatterRateValue = decimal(formatterRate)
-        else {
-            saveMessage = "Cost estimates must be valid numbers"
-            saveIsError = true
-            return
-        }
-
-        settings.speechProviderKind = providerKind
-        settings.azureEndpoint = azureEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.azureDeployment = azureDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.azureAPIVersion = azureAPIVersion.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.compatibleEndpoint = compatibleEndpoint.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.compatibleModel = compatibleModel.trimmingCharacters(in: .whitespacesAndNewlines)
         settings.formattingEnabled = formattingEnabled
-        settings.gptDeployment = gptDeployment.trimmingCharacters(in: .whitespacesAndNewlines)
-        settings.speakerContext = speakerContext
         settings.silenceTimeout = silenceTimeout
         settings.recordingsToKeep = recordingsToKeep
         settings.soundEffectsEnabled = soundEffectsEnabled
 
-        settings.transcriptionRatePerMinute = transcriptionRateValue
-        settings.formatterRatePer1kChars = formatterRateValue
-
         do {
-            if !azureKey.isEmpty {
-                try Keychain.set(azureKey, account: "azure-openai-key")
-                hasAzureKey = true
-                azureKey = ""
-            }
-            if !compatibleKey.isEmpty {
-                try Keychain.set(compatibleKey, account: "openai-compatible-key")
-                hasCompatibleKey = true
-                compatibleKey = ""
+            let trimmedKey = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            if !trimmedKey.isEmpty {
+                try Keychain.set(trimmedKey, account: "deepgram-key")
+                hasDeepgramKey = true
+                deepgramKey = ""
             }
             viewModel.refreshConfig()
-            viewModel.refreshCost()
             saveMessage = "Settings saved"
         } catch {
             saveMessage = "Could not save the Keychain value"
@@ -503,63 +350,26 @@ struct SettingsPage: View {
         testResult = nil
         isTesting = true
         Task {
-            let endpoint: String
-            let provider: TranscriptionProvider
-            switch providerKind {
-            case .azureOpenAI:
-                guard let url = URL(string: azureEndpoint),
-                      !azureDeployment.isEmpty,
-                      let key = azureKey.isEmpty ? Keychain.get(account: "azure-openai-key") : azureKey
-                else {
-                    await MainActor.run {
-                        testResult = ProviderHealthCheck.result(
-                            providerName: "Azure OpenAI",
-                            endpoint: azureEndpoint,
-                            ok: false,
-                            startedAt: Date(),
-                            finishedAt: Date(),
-                            message: "Enter an endpoint, deployment and API key."
-                        )
-                        isTesting = false
-                    }
-                    return
+            let typed = deepgramKey.trimmingCharacters(in: .whitespacesAndNewlines)
+            let key = typed.isEmpty ? (Keychain.get(account: "deepgram-key") ?? "") : typed
+            guard !key.isEmpty else {
+                await MainActor.run {
+                    testResult = ProviderHealthCheck.result(
+                        providerName: "Deepgram",
+                        endpoint: deepgramEndpoint,
+                        ok: false,
+                        startedAt: Date(),
+                        finishedAt: Date(),
+                        message: "Enter your Deepgram API key."
+                    )
+                    isTesting = false
                 }
-                endpoint = azureEndpoint
-                provider = AzureOpenAIProvider(config: .init(
-                    endpoint: url,
-                    apiKey: key,
-                    deployment: azureDeployment,
-                    apiVersion: azureAPIVersion
-                ))
-            case .openAICompatible:
-                guard let url = URL(string: compatibleEndpoint), !compatibleModel.isEmpty else {
-                    await MainActor.run {
-                        testResult = ProviderHealthCheck.result(
-                            providerName: "OpenAI-compatible",
-                            endpoint: compatibleEndpoint,
-                            ok: false,
-                            startedAt: Date(),
-                            finishedAt: Date(),
-                            message: "Enter a valid base URL and model."
-                        )
-                        isTesting = false
-                    }
-                    return
-                }
-                endpoint = compatibleEndpoint
-                let key = compatibleKey.isEmpty
-                    ? Keychain.get(account: "openai-compatible-key") ?? ""
-                    : compatibleKey
-                provider = OpenAICompatibleProvider(config: .init(
-                    baseURL: url,
-                    apiKey: key,
-                    model: compatibleModel
-                ))
+                return
             }
-
+            let provider = DeepgramProvider(config: .init(apiKey: key, smartFormat: formattingEnabled))
             let result = await ProviderHealthCheck.check(
                 provider: provider,
-                endpoint: endpoint,
+                endpoint: deepgramEndpoint,
                 hint: TranscriptionHint(languagePin: viewModel.languagePin, dictionaryWords: [])
             )
             await MainActor.run {
@@ -567,10 +377,6 @@ struct SettingsPage: View {
                 isTesting = false
             }
         }
-    }
-
-    private func decimal(_ value: String) -> Double? {
-        Double(value.replacingOccurrences(of: ",", with: "."))
     }
 
     private func openPrivacyPane(_ pane: String) {

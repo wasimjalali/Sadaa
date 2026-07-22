@@ -27,11 +27,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     private var recordingStartedAt: Date?
     private var currentLevel: Float = 0
     private var axPollTimer: Timer?
-    /// A formatter-unavailable notice to surface once the dictation lands.
-    /// Shown from render(.idle): showing it earlier is
-    /// useless because the delivering/idle transitions repaint the HUD within
-    /// milliseconds and the message is never seen.
-    private var pendingDeliveryNotice: String?
     /// Previous dictation state, so the stop chime only plays when a recording
     /// actually ended (retryLast jumps straight to .transcribing).
     private var lastDictationState: DictationState = .idle
@@ -188,48 +183,26 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             },
             record: { [weak self] record in
                 guard let self else { return }
-                let cost = CostEstimator.estimate(
-                    durationSeconds: record.durationSeconds,
-                    transcriptionRatePerMinute: self.settings.transcriptionRatePerMinute,
-                    characters: record.text.count,
-                    formatterRatePer1kChars: self.settings.formatterRatePer1kChars)
-                let storedRecord = record.withEstimatedCost(cost)
                 self.languageMemory?.recordUsage(
-                    termIDs: storedRecord.memoryHitIDs ?? [],
-                    replacementRuleIDs: storedRecord.replacementRuleIDs ?? [],
-                    snippetIDs: storedRecord.snippetIDs ?? []
+                    termIDs: record.memoryHitIDs ?? [],
+                    replacementRuleIDs: record.replacementRuleIDs ?? [],
+                    snippetIDs: record.snippetIDs ?? []
                 )
-                self.history?.append(storedRecord)
+                self.history?.append(record)
                 self.viewModel?.refreshLanguageMemory()
                 self.viewModel?.refreshRecent()
-                self.viewModel?.refreshCost()
             },
-            format: { [weak self, settings, languageMemory] raw, ctx in
+            format: { [languageMemory] raw, ctx in
+                // Deepgram's smart_format handles punctuation and casing during
+                // transcription. Here we only apply the deterministic local
+                // Language Memory corrections (dictionary, replacements, snippets).
                 let memory = languageMemory.snapshot()
                 let memoryLanguage = MemoryLanguage(languagePin: ctx.language)
                 let prepared = LanguageMemoryPostProcessor.applyDeterministic(
                     to: raw,
                     snapshot: memory,
                     language: memoryLanguage)
-                // Rebuilt per dictation so toggling formatting or editing the
-                // GPT deployment applies immediately, with no relaunch. Smart
-                // formatting is the master switch: when it's off or no GPT
-                // deployment is set, buildFormatter returns nil and we hand back
-                // the raw text unchanged, so no GPT ever touches the dictation.
-                guard let formatter = Self.buildFormatter(settings: settings) else {
-                    return LanguageMemoryPostProcessor.rawResult(from: prepared)
-                }
-                do {
-                    let formatted = try await formatter.format(rawTranscript: prepared.text, context: ctx)
-                    return LanguageMemoryPostProcessor.formattedResult(
-                        prepared: prepared,
-                        formatted: formatted,
-                        snapshot: memory,
-                        language: memoryLanguage)
-                } catch {
-                    self?.pendingDeliveryNotice = "Formatter unavailable: \(Self.describeFormatterError(error))"
-                    throw error
-                }
+                return LanguageMemoryPostProcessor.rawResult(from: prepared)
             },
             rawTransform: { [languageMemory] raw, ctx in
                 LanguageMemoryPostProcessor.rawResult(
@@ -247,7 +220,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         baseVocabulary: BaseVocabulary.terms,
                         budget: 50,
                         language: MemoryLanguage(languagePin: settings.languagePin)),
-                    speakerContext: settings.speakerContext,
                     language: settings.languagePin,
                     snippets: Self.snippets(from: memory),
                     replacementRules: memory.replacements)
@@ -255,12 +227,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             suggestTerms: { [weak self] terms in
                 self?.languageMemory?.suggest(terms)
                 self?.viewModel?.refreshLanguageMemory()
-            },
-            formatterUnavailable: { [weak self] in
-                guard let self else { return }
-                if self.pendingDeliveryNotice == nil {
-                    self.pendingDeliveryNotice = "Inserted Memory-cleaned text; formatter unavailable."
-                }
             },
             isSecureInputActive: { IsSecureEventInputEnabled() }
         )
@@ -361,27 +327,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             mode: formatted.mode,
             rawText: transcript.text,
             intermediateText: record.text,
-            modelDeployment: settings.azureDeployment,
+            modelDeployment: nil,
             memoryHitIDs: formatted.memoryHitIDs.isEmpty ? nil : formatted.memoryHitIDs,
             replacementRuleIDs: formatted.replacementRuleIDs.isEmpty ? nil : formatted.replacementRuleIDs,
             snippetIDs: formatted.snippetIDs.isEmpty ? nil : formatted.snippetIDs,
             audioPath: audioURL.path
-        )
-        let cost = CostEstimator.estimate(
-            durationSeconds: reprocessed.durationSeconds,
-            transcriptionRatePerMinute: settings.transcriptionRatePerMinute,
-            characters: reprocessed.text.count,
-            formatterRatePer1kChars: settings.formatterRatePer1kChars
         )
         languageMemory.recordUsage(
             termIDs: formatted.memoryHitIDs,
             replacementRuleIDs: formatted.replacementRuleIDs,
             snippetIDs: formatted.snippetIDs
         )
-        history?.append(reprocessed.withEstimatedCost(cost))
+        history?.append(reprocessed)
         viewModel?.refreshLanguageMemory()
         viewModel?.refreshRecent()
-        viewModel?.refreshCost()
         hud.show(.done)
         hud.hide(after: 1.0)
     }
@@ -396,20 +355,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             snapshot: memory,
             language: memoryLanguage
         )
-        guard let formatter = Self.buildFormatter(settings: settings) else {
-            return LanguageMemoryPostProcessor.rawResult(from: prepared)
-        }
-        do {
-            let formatted = try await formatter.format(rawTranscript: prepared.text, context: context)
-            return LanguageMemoryPostProcessor.formattedResult(
-                prepared: prepared,
-                formatted: formatted,
-                snapshot: memory,
-                language: memoryLanguage
-            )
-        } catch {
-            return LanguageMemoryPostProcessor.rawResult(from: prepared)
-        }
+        return LanguageMemoryPostProcessor.rawResult(from: prepared)
     }
 
     private func transcriptionHint(languageMemory: LanguageMemoryStore) -> TranscriptionHint {
@@ -435,7 +381,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 budget: 50,
                 language: MemoryLanguage(languagePin: settings.languagePin)
             ),
-            speakerContext: settings.speakerContext,
             language: settings.languagePin,
             snippets: Self.snippets(from: memory),
             replacementRules: memory.replacements
@@ -448,48 +393,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
             .map { Snippet(id: $0.id, trigger: $0.trigger, expansion: $0.expansion) }
     }
 
-    /// Active transcription provider for the focused local build.
+    /// Active transcription provider: Deepgram Nova-3, keyed from the Keychain.
     private static func buildProviders(settings: AppSettings)
         -> [TranscriptionProvider] {
-        switch settings.speechProviderKind {
-        case .azureOpenAI:
-            if let endpoint = URL(string: settings.azureEndpoint),
-               !settings.azureEndpoint.isEmpty,
-               !settings.azureDeployment.isEmpty,
-               let key = Keychain.get(account: "azure-openai-key") {
-                return [AzureOpenAIProvider(config: .init(
-                    endpoint: endpoint, apiKey: key,
-                    deployment: settings.azureDeployment,
-                    apiVersion: settings.azureAPIVersion))]
-            }
-        case .openAICompatible:
-            if let endpoint = URL(string: settings.compatibleEndpoint),
-               !settings.compatibleModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                return [OpenAICompatibleProvider(config: .init(
-                    baseURL: endpoint,
-                    apiKey: Keychain.get(account: "openai-compatible-key") ?? "",
-                    model: settings.compatibleModel
-                ))]
-            }
+        guard let key = Keychain.get(account: "deepgram-key")?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !key.isEmpty else {
+            return []
         }
-
-        return []
-    }
-
-    /// Builds the smart formatter from settings, or nil when formatting is off
-    /// or unconfigured (in which case dictations are delivered raw).
-    private static func buildFormatter(settings: AppSettings) -> AzureChatFormatter? {
-        guard settings.formattingEnabled,
-              !settings.gptDeployment.isEmpty,
-              let endpoint = URL(string: settings.azureEndpoint),
-              !settings.azureEndpoint.isEmpty,
-              let key = Keychain.get(account: "azure-openai-key")
-        else { return nil }
-        let config = AzureChatFormatter.Config(
-            endpoint: endpoint, apiKey: key,
-            deployment: settings.gptDeployment,
-            apiVersion: settings.azureAPIVersion)
-        return AzureChatFormatter(config: config)
+        return [DeepgramProvider(config: .init(
+            apiKey: key,
+            smartFormat: settings.formattingEnabled))]
     }
 
     private static func describeProviderError(_ error: ProviderError) -> String {
@@ -509,10 +423,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .transport(let urlError):
             return urlError.localizedDescription
         }
-    }
-
-    private static func describeFormatterError(_ error: Error) -> String {
-        String(FormatterHealthCheck.describe(error).prefix(160))
     }
 
     private func startHotkeys() {
@@ -583,11 +493,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         case .idle:
             stopRecordingTimer()
             setIcon("waveform", tint: nil)
-            if let notice = pendingDeliveryNotice {
-                pendingDeliveryNotice = nil
-                hud.show(.error(notice))
-                hud.hide(after: 4)
-            } else if lastDictationState == .delivering {
+            if lastDictationState == .delivering {
                 // A dictation just landed: flash a brief success confirmation
                 // before the pill fades out, the way WhisperFlow and friends do.
                 hud.show(.done)
@@ -687,9 +593,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
         menu.setSubmenu(languageMenu, for: languageItem)
         menu.addItem(languageItem)
 
-        // Quick literal-dictation switch. When off, dictations are pure
-        // transcription with no GPT in the loop, so they can never take action.
-        let formattingItem = NSMenuItem(title: "Smart formatting",
+        // Quick auto-format switch, mirrors the Settings toggle. When off,
+        // Deepgram's smart_format is disabled and transcripts come back raw.
+        let formattingItem = NSMenuItem(title: "Auto-format transcript",
                                         action: #selector(toggleSmartFormatting),
                                         keyEquivalent: "")
         formattingItem.target = self
@@ -723,8 +629,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     @objc private func toggleSmartFormatting() {
-        // Off = pure transcription, no GPT, so dictation can never take action.
-        // Takes effect on the next dictation (the formatter is built per use).
+        // Off = raw transcript, Deepgram's smart_format is disabled.
+        // Takes effect on the next dictation (the provider is built per use).
         settings.formattingEnabled.toggle()
         formattingMenuItem?.state = settings.formattingEnabled ? .on : .off
     }

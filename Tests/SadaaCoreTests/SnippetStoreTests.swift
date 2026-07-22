@@ -48,14 +48,4 @@ import Foundation
         store.remove(id: id)
         #expect(store.all().isEmpty)
     }
-
-    @Test func testPromptBuilderIncludesSnippets() {
-        let prompt = FormattingPromptBuilder.systemPrompt(
-            profile: FormattingProfiles.default,
-            dictionaryWords: [],
-            speakerContext: "ctx",
-            snippets: [Snippet(trigger: "my sig", expansion: "Best, Wasim")])
-        #expect(prompt.contains("Expand these spoken shortcuts"))
-        #expect(prompt.contains("\"my sig\" -> Best, Wasim"))
-    }
 }

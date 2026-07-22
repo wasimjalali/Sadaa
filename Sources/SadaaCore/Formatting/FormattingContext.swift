@@ -4,20 +4,17 @@ import Foundation
 public struct FormattingContext: Sendable {
     public let appBundleID: String?
     public let dictionaryWords: [String]
-    public let speakerContext: String
     public let language: LanguagePin
     public let snippets: [Snippet]
     public let replacementRules: [ReplacementRule]
 
     public init(appBundleID: String?,
                 dictionaryWords: [String],
-                speakerContext: String,
                 language: LanguagePin,
                 snippets: [Snippet] = [],
                 replacementRules: [ReplacementRule] = []) {
         self.appBundleID = appBundleID
         self.dictionaryWords = dictionaryWords
-        self.speakerContext = speakerContext
         self.language = language
         self.snippets = snippets
         self.replacementRules = replacementRules

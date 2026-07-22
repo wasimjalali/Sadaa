@@ -14,52 +14,30 @@ import Foundation
     }
 
     @Test func testDefaults() {
-        #expect(settings.speechProviderKind == .azureOpenAI)
-        #expect(SpeechProviderKind.allCases == [.azureOpenAI, .openAICompatible])
-        #expect(settings.azureAPIVersion == "2025-03-01-preview")
         #expect(settings.languagePin == .auto)
         #expect(settings.silenceTimeout == 60)
         #expect(settings.recordingsToKeep == 10)
-        #expect(settings.azureEndpoint == "")
-        #expect(settings.azureDeployment == "")
-        #expect(settings.compatibleEndpoint == "")
-        #expect(settings.compatibleModel == "whisper-1")
-        #expect(settings.transcriptionPreset == .fast)
-        #expect(TranscriptionPreset.allCases == [.fast, .accurate])
-        #expect(settings.fastTranscriptionDeployment == "gpt-4o-mini-transcribe")
-        #expect(settings.accurateTranscriptionDeployment == "gpt-4o-transcribe")
+        #expect(settings.formattingEnabled == true)
         #expect(settings.hotkeyKeycode == 54)          // Right Command
         #expect(settings.languageSwitchKeycode == 60)  // Right Shift (under Return)
         #expect(settings.soundEffectsEnabled == true)
     }
 
     @Test func testRoundTrip() {
-        settings.speechProviderKind = .openAICompatible
-        settings.azureEndpoint = "https://myres.openai.azure.com"
-        settings.azureDeployment = "whisper"
-        settings.transcriptionPreset = .accurate
-        settings.fastTranscriptionDeployment = "fast"
-        settings.accurateTranscriptionDeployment = "accurate"
         settings.languagePin = .de
         settings.silenceTimeout = 45.5
         settings.recordingsToKeep = 5
+        settings.formattingEnabled = false
         settings.hotkeyKeycode = 61
         settings.languageSwitchKeycode = 63
-        settings.compatibleEndpoint = "http://127.0.0.1:8080"
-        settings.compatibleModel = "whisper-large-v3"
-        #expect(settings.speechProviderKind == .openAICompatible)
-        #expect(settings.azureEndpoint == "https://myres.openai.azure.com")
-        #expect(settings.azureDeployment == "whisper")
-        #expect(settings.transcriptionPreset == .accurate)
-        #expect(settings.fastTranscriptionDeployment == "fast")
-        #expect(settings.accurateTranscriptionDeployment == "accurate")
+        settings.soundEffectsEnabled = false
         #expect(settings.languagePin == .de)
         #expect(settings.silenceTimeout == 45.5)
         #expect(settings.recordingsToKeep == 5)
+        #expect(settings.formattingEnabled == false)
         #expect(settings.hotkeyKeycode == 61)
         #expect(settings.languageSwitchKeycode == 63)
-        #expect(settings.compatibleEndpoint == "http://127.0.0.1:8080")
-        #expect(settings.compatibleModel == "whisper-large-v3")
+        #expect(settings.soundEffectsEnabled == false)
     }
 
     @Test func testTwoHotkeysSwapWhenTheyCollide() {
