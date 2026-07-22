@@ -6,6 +6,7 @@ import Foundation
     @Test func testAlwaysAndHighTermsComeFirstAndCapApplies() {
         let now = Date()
         let normal = MemoryTerm(phrase: "Normal", updatedAt: now, usageCount: 0)
+        // Pronunciations must NOT appear in keyterms (they are misheard forms).
         let high = MemoryTerm(phrase: "High", pronunciations: ["hie"],
                               priority: .high, updatedAt: now, usageCount: 0)
         let always = MemoryTerm(phrase: "Always", aliases: ["Always Alias"],
@@ -17,7 +18,26 @@ import Foundation
             budget: 4
         )
 
-        #expect(list == ["Always", "Always Alias", "High", "hie"])
+        // Pronunciations no longer consume budget slots, so Normal fits
+        // before base vocabulary fills the remainder.
+        #expect(list == ["Always", "Always Alias", "High", "Normal"])
+        #expect(!list.contains("hie"))
+        #expect(!list.contains("Base"))
+    }
+
+    @Test func testIncludesReplacementTargetsAndSnippetTriggersNotMatches() {
+        let rule = ReplacementRule(match: "cloud code", replacement: "Claude Code")
+        let snippet = MemorySnippet(trigger: "my sign", expansion: "Best regards")
+        let list = MemoryBiasBuilder.biasList(
+            terms: [],
+            baseVocabulary: [],
+            budget: 10,
+            replacements: [rule],
+            snippets: [snippet]
+        )
+        #expect(list.contains("Claude Code"))
+        #expect(list.contains("my sign"))
+        #expect(!list.contains("cloud code"))
     }
 
     @Test func testDedupesAgainstBaseVocabulary() {

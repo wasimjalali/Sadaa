@@ -264,11 +264,15 @@ struct HistoryPage: View {
     }
 
     private func correctionSheet(_ record: DictationRecord) -> some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Learn a correction")
+        let preview = viewModel.languageMemory.previewLearnCorrection(
+            observed: correctionObserved,
+            corrected: correctionCorrected
+        )
+        return VStack(alignment: .leading, spacing: 18) {
+            Text("Teach the dictionary")
                 .font(.system(size: 22, weight: .bold))
                 .foregroundStyle(Theme.ink)
-            Text("Save what Sadaa heard and the spelling you want next time.")
+            Text("Edit the mistake and the spelling you want. Sadaa learns auto-corrections so the same error is fixed next time.")
                 .font(.system(size: 13))
                 .foregroundStyle(Theme.muted)
 
@@ -280,21 +284,50 @@ struct HistoryPage: View {
                 Text("Write instead").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.muted)
                 TextField("Correct spelling", text: $correctionCorrected).premiumInputChrome()
             }
+
+            if !preview.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Will learn")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundStyle(Theme.muted)
+                    ForEach(Array(preview.enumerated()), id: \.offset) { _, pair in
+                        HStack(spacing: 8) {
+                            Text(pair.observed)
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(Theme.ink)
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 10))
+                                .foregroundStyle(Theme.muted)
+                            Text(pair.corrected)
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundStyle(Theme.brand)
+                        }
+                    }
+                }
+                .padding(12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.surfaceSubtle, in: RoundedRectangle(cornerRadius: 10))
+            }
+
             HStack {
                 Spacer()
                 Button("Cancel") { correctionRecord = nil }
                     .clickableCursor()
-                Button("Save correction") {
+                Button("Save and learn") {
                     viewModel.languageMemory.learnCorrection(
                         observed: correctionObserved,
                         corrected: correctionCorrected
                     )
+                    viewModel.refreshLanguageMemory()
                     correctionRecord = nil
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(Theme.brand)
                 .clickableCursor()
-                .disabled(correctionObserved.isEmpty || correctionCorrected.isEmpty)
+                .disabled(
+                    correctionObserved.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                        || correctionCorrected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                )
             }
         }
         .padding(24)
@@ -303,8 +336,18 @@ struct HistoryPage: View {
     }
 
     private func beginCorrection(_ record: DictationRecord) {
-        correctionObserved = record.rawText ?? record.text
-        correctionCorrected = record.text
+        // Prefer a short teaching pair: if raw differs from final, start from
+        // that. Otherwise put the final text in both fields so the user can
+        // edit only the wrong span.
+        let raw = record.rawText?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        let final = record.text.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !raw.isEmpty, raw != final {
+            correctionObserved = raw
+            correctionCorrected = final
+        } else {
+            correctionObserved = final
+            correctionCorrected = final
+        }
         correctionRecord = record
     }
 

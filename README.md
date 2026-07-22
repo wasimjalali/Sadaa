@@ -39,13 +39,15 @@ Use **Test connection** in Settings to run a tiny redacted transcription probe b
 - Recording auto-stops after 60s of silence or 10 minutes total.
 - Pick **Auto-detect / English / German** in the menu bar.
 - The final text is always copied to the clipboard as a backup, so if insertion misses you can paste it.
-- Teach Sadaa exact names and specialist spellings in **Dictionary**, and add deterministic auto-corrections for recurring mistakes. Advanced spelling hints, text shortcuts and import/export stay available without cluttering the default workflow.
+- Teach Sadaa exact names and specialist spellings in **Dictionary**. Words bias Deepgram recognition *and* fix casing locally. Add a "sounds like" form so misheard variants are rewritten after STT.
+- **Learn once, fix forever**: use **Fix a recurring mistake** on the Dictionary page, or **Teach the dictionary** in Library. Sadaa stores a deterministic auto-correction and a high-priority dictionary term, so the same error is corrected on the next dictation.
+- Learning uses an OpenWhispr-style correction learner (word-level LCS + edit distance) so multi-word edits can teach several pairs at once.
 - Use **Notes** for local dictated notes with search, pins, auto-save, tags, Markdown copy, JSON backup/restore and append-latest-dictation.
-- In **Library**, search, copy, send a dictation to Notes, reprocess retained audio or turn a correction into a dictionary entry.
+- In **Library**, search, copy, send a dictation to Notes, reprocess retained audio or teach a correction into the dictionary.
 
 ## Transcription model
 
-Sadaa uses Deepgram's **Nova-3** model for all dictation. Auto-format (Deepgram's `smart_format`) adds punctuation, capitalization and formatted numbers and dates; turn it off in Settings for raw text. Your personal dictionary terms are sent as Deepgram key-terms to bias recognition, and dictionary corrections always run locally. Local app data stays under Sadaa's Application Support directory; Sadaa does not read, scan, index, or default-save into your Documents folder.
+Sadaa uses Deepgram's **Nova-3** model for all dictation. Auto-format (Deepgram's `smart_format`) adds punctuation, capitalization and formatted numbers and dates; turn it off in Settings for raw text. Your personal dictionary terms (correct spellings only) are sent as Deepgram keyterms to bias recognition. Misheard forms, aliases and auto-corrections always run locally after transcription so learning actually sticks. Local app data stays under Sadaa's Application Support directory; Sadaa does not read, scan, index, or default-save into your Documents folder.
 
 ## Develop
 

@@ -39,10 +39,16 @@ struct MemoryTermRow: View {
     }
 
     private func metadata(for term: MemoryTerm) -> String {
-        var parts = [priorityTitle(term.priority), languageTitle(term.language)]
-        if term.usageCount > 0 { parts.append("used \(term.usageCount) times") }
+        var parts: [String] = []
+        if term.notes == "Learned from correction" {
+            parts.append("Learned")
+        }
+        if term.usageCount > 0 { parts.append("used \(term.usageCount)×") }
         let hints = term.pronunciations + term.aliases
-        if !hints.isEmpty { parts.append(hints.joined(separator: ", ")) }
+        if !hints.isEmpty {
+            parts.append("also fixes: " + hints.joined(separator: ", "))
+        }
+        if parts.isEmpty { parts.append("Biases recognition and fixes casing") }
         return parts.joined(separator: " · ")
     }
 }

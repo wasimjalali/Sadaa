@@ -141,20 +141,21 @@ final class LanguageMemoryViewModel: ObservableObject {
         refresh()
     }
 
-    func learnCorrection(observed: String, corrected: String) {
-        let observedTrimmed = observed.trimmingCharacters(in: .whitespacesAndNewlines)
-        let correctedTrimmed = corrected.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !observedTrimmed.isEmpty, !correctedTrimmed.isEmpty else { return }
-        switch LanguageMemoryLearningPolicy.makeEntry(
-            observed: observedTrimmed,
-            corrected: correctedTrimmed
-        ) {
-        case .term(let term):
-            _ = store.upsertTerm(term)
-        case .replacement(let replacement):
-            _ = store.upsertReplacement(replacement)
-        }
+    @discardableResult
+    func learnCorrection(observed: String, corrected: String) -> LanguageMemoryLearnResult {
+        let result = store.learnFromEdit(original: observed, corrected: corrected)
         refresh()
+        return result
+    }
+
+    /// Preview the pairs that would be learned without writing them.
+    func previewLearnCorrection(observed: String, corrected: String) -> [CorrectionPair] {
+        let existing = terms.map(\.phrase) + replacements.map(\.replacement)
+        return LanguageMemoryLearningPolicy.entries(
+            observed: observed,
+            corrected: corrected,
+            existingDictionary: existing
+        ).pairs
     }
 
     func recordUsage(termIDs: [UUID], replacementRuleIDs: [UUID], snippetIDs: [UUID] = []) {

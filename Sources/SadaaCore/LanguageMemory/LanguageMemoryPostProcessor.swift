@@ -21,8 +21,11 @@ public enum LanguageMemoryPostProcessor {
     public static func applyDeterministic(to text: String,
                                           snapshot: LanguageMemorySnapshot,
                                           language: MemoryLanguage) -> LanguageMemoryProcessingResult {
+        // Effective rules include explicit auto-corrections plus synthetic
+        // fixes derived from dictionary aliases, pronunciations and casing.
+        let rules = DictionaryCorrector.effectiveRules(from: snapshot, language: language)
         let firstReplacement = ReplacementEngine.apply(
-            snapshot.replacements,
+            rules,
             to: text,
             language: language
         )
@@ -32,7 +35,7 @@ public enum LanguageMemoryPostProcessor {
             language: language
         )
         let finalReplacement = ReplacementEngine.apply(
-            snapshot.replacements,
+            rules,
             to: snippet.text,
             language: language
         )
