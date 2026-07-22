@@ -42,7 +42,6 @@ struct HistoryPage: View {
                 viewModel.historyStore.clear()
                 selectedID = nil
                 viewModel.refreshRecent()
-                viewModel.refreshCost()
             }
             Button("Cancel", role: .cancel) {}
         }
@@ -248,7 +247,6 @@ struct HistoryPage: View {
                 detailLine("Provider", record.provider)
                 if let model = record.modelDeployment, !model.isEmpty { detailLine("Model", model) }
                 detailLine("Dictionary matches", "\(memoryCount(record))")
-                if let cost = record.estimatedCost { detailLine("Estimated cost", PageFormat.dollars(cost)) }
             }
             .padding(.top, 10)
         }
@@ -314,7 +312,6 @@ struct HistoryPage: View {
         viewModel.historyStore.delete(id: record.id)
         if selectedID == record.id { selectedID = nil }
         viewModel.refreshRecent()
-        viewModel.refreshCost()
     }
 
     private func copy(_ text: String) {

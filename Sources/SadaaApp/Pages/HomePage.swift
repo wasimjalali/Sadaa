@@ -21,8 +21,6 @@ enum PageFormat {
         }
     }
 
-    static func minutes(_ value: Double) -> String { String(format: "%.1f min", value) }
-    static func dollars(_ value: Double) -> String { String(format: "$%.2f", value) }
 }
 
 struct HomePage: View {

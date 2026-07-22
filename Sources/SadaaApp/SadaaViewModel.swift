@@ -8,9 +8,8 @@ final class SadaaViewModel: ObservableObject {
     @Published var dictationState: DictationState = .idle
     @Published var recent: [DictationRecord] = []
     @Published var providerConfigured: Bool = false
-    @Published var providerName: String = "Azure OpenAI"
+    @Published var providerName: String = "Deepgram"
     @Published var languagePin: LanguagePin = .auto
-    @Published var monthlyCost = CostMeter.Totals(minutes: 0, cost: 0)
     /// Whether the global hotkey tap is actually running (Accessibility granted).
     @Published var hotkeyActive: Bool = false
     @Published var hotkeyKeycode: Int = 54
@@ -48,7 +47,6 @@ final class SadaaViewModel: ObservableObject {
         self.onToggle = onToggle
         refreshConfig()
         refreshRecent()
-        refreshCost()
     }
 
     func toggle() { onToggle() }
@@ -59,29 +57,14 @@ final class SadaaViewModel: ObservableObject {
 
     func refreshRecent() { recent = history.recent(5) }
 
-    func refreshCost() {
-        monthlyCost = CostMeter.monthlyTotals(records: history.all(), now: Date())
-    }
-
     func refreshConfig() {
         // exists() not get(): refreshConfig runs on the main thread (init, and
         // after every settings/language change), and get() can trigger a
         // blocking keychain authorization prompt that freezes the app, and with
         // it the HUD. An existence check is all "configured?" needs and never
         // prompts. See Keychain.exists.
-        switch settings.speechProviderKind {
-        case .azureOpenAI:
-            providerName = "Azure OpenAI"
-            providerConfigured =
-                !settings.azureEndpoint.isEmpty &&
-                !settings.azureDeployment.isEmpty &&
-                Keychain.exists(account: "azure-openai-key")
-        case .openAICompatible:
-            providerName = "OpenAI-compatible"
-            providerConfigured =
-                URL(string: settings.compatibleEndpoint) != nil &&
-                !settings.compatibleModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
+        providerName = "Deepgram"
+        providerConfigured = Keychain.exists(account: "deepgram-key")
         languagePin = settings.languagePin
         hotkeyKeycode = settings.hotkeyKeycode
         languageSwitchKeycode = settings.languageSwitchKeycode
@@ -174,6 +157,5 @@ final class SadaaViewModel: ObservableObject {
             snippetIDs: result.snippetIDs
         )
         refreshRecent()
-        refreshCost()
     }
 }
