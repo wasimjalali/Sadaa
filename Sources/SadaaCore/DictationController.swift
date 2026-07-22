@@ -60,7 +60,7 @@ public final class DictationController {
                 rawTransform: ((String, FormattingContext) async -> FormattingResult)? = nil,
                 context: @escaping () -> FormattingContext = {
                     FormattingContext(appBundleID: nil, dictionaryWords: [],
-                                      speakerContext: "", language: .auto)
+                                      language: .auto)
                 },
                 suggestTerms: @escaping ([String]) -> Void = { _ in },
                 formatterUnavailable: @escaping () -> Void = {},

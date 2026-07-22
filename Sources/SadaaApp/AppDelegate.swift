@@ -220,7 +220,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                         baseVocabulary: BaseVocabulary.terms,
                         budget: 50,
                         language: MemoryLanguage(languagePin: settings.languagePin)),
-                    speakerContext: settings.speakerContext,
                     language: settings.languagePin,
                     snippets: Self.snippets(from: memory),
                     replacementRules: memory.replacements)
@@ -382,7 +381,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
                 budget: 50,
                 language: MemoryLanguage(languagePin: settings.languagePin)
             ),
-            speakerContext: settings.speakerContext,
             language: settings.languagePin,
             snippets: Self.snippets(from: memory),
             replacementRules: memory.replacements

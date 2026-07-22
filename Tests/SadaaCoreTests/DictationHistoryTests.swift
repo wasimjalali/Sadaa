@@ -65,20 +65,19 @@ import Foundation
         #expect(reloaded.all().first?.mode == .formatted)
     }
 
-    @Test func testWithEstimatedCostPreservesMode() {
+    @Test func testRecordPreservesDiagnosticFields() {
         let ruleID = UUID()
         let snippetID = UUID()
         let record = DictationRecord(
-            text: "x", createdAt: Date(), language: nil, provider: "azure",
+            text: "x", createdAt: Date(), language: nil, provider: "deepgram",
             durationSeconds: 1, mode: .formatted, rawText: "raw",
             replacementRuleIDs: [ruleID], snippetIDs: [snippetID],
             audioPath: "/tmp/audio.wav")
-        let updated = record.withEstimatedCost(0.01)
-        #expect(updated.mode == .formatted)
-        #expect(updated.rawText == "raw")
-        #expect(updated.replacementRuleIDs == [ruleID])
-        #expect(updated.snippetIDs == [snippetID])
-        #expect(updated.audioPath == "/tmp/audio.wav")
+        #expect(record.mode == .formatted)
+        #expect(record.rawText == "raw")
+        #expect(record.replacementRuleIDs == [ruleID])
+        #expect(record.snippetIDs == [snippetID])
+        #expect(record.audioPath == "/tmp/audio.wav")
     }
 
     @Test func testRoundTripPersists() throws {

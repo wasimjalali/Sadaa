@@ -101,7 +101,7 @@ struct FakeProvider: TranscriptionProvider {
             format: format,
             rawTransform: rawTransform,
             context: { FormattingContext(appBundleID: nil, dictionaryWords: [],
-                                         speakerContext: "", language: .auto) },
+                                         language: .auto) },
             suggestTerms: { [weak self] terms in self?.suggested.append(contentsOf: terms) },
             formatterUnavailable: { [weak self] in self?.fellBack = true })
         controller.onStateChange = { [weak self] state in self?.states.append(state) }
@@ -542,7 +542,7 @@ struct FakeProvider: TranscriptionProvider {
                 contextCalls += 1
                 return FormattingContext(
                     appBundleID: contextCalls == 1 ? "com.target.app" : "ai.karko.sadaa",
-                    dictionaryWords: [], speakerContext: "", language: .auto)
+                    dictionaryWords: [], language: .auto)
             })
         controller.toggle()
         await controller.toggleAndWait()

@@ -14,15 +14,6 @@ public enum LanguagePin: String, CaseIterable, Sendable {
     }
 }
 
-public enum TranscriptionPreset: String, CaseIterable, Sendable {
-    case fast, accurate
-}
-
-public enum SpeechProviderKind: String, CaseIterable, Sendable {
-    case azureOpenAI
-    case openAICompatible
-}
-
 public struct HotkeyAssignment: Equatable, Sendable {
     public private(set) var dictation: Int
     public private(set) var languageSwitch: Int
@@ -49,28 +40,15 @@ public struct HotkeyAssignment: Equatable, Sendable {
     }
 }
 
-/// Non-secret app configuration. API keys live in Keychain, never here.
+/// Non-secret app configuration. The Deepgram API key lives in Keychain, never here.
 public final class AppSettings {
     private enum Keys {
-        static let speechProviderKind = "speechProviderKind"
-        static let azureEndpoint = "azureEndpoint"
-        static let azureDeployment = "azureDeployment"
-        static let transcriptionPreset = "transcriptionPreset"
-        static let fastTranscriptionDeployment = "fastTranscriptionDeployment"
-        static let accurateTranscriptionDeployment = "accurateTranscriptionDeployment"
-        static let azureAPIVersion = "azureAPIVersion"
-        static let compatibleEndpoint = "compatibleEndpoint"
-        static let compatibleModel = "compatibleModel"
         static let languagePin = "languagePin"
         static let silenceTimeout = "silenceTimeout"
         static let recordingsToKeep = "recordingsToKeep"
         static let hotkeyKeycode = "hotkeyKeycode"
         static let languageSwitchKeycode = "languageSwitchKeycode"
-        static let gptDeployment = "gptDeployment"
         static let formattingEnabled = "formattingEnabled"
-        static let speakerContext = "speakerContext"
-        static let transcriptionRatePerMinute = "transcriptionRatePerMinute"
-        static let formatterRatePer1kChars = "formatterRatePer1kChars"
         static let soundEffectsEnabled = "soundEffectsEnabled"
         static let lastExportFolder = "lastExportFolder"
     }
@@ -79,59 +57,6 @@ public final class AppSettings {
 
     public init(defaults: UserDefaults = .standard) {
         self.defaults = defaults
-    }
-
-    public var speechProviderKind: SpeechProviderKind {
-        get {
-            SpeechProviderKind(rawValue: defaults.string(forKey: Keys.speechProviderKind) ?? "")
-                ?? .azureOpenAI
-        }
-        set { defaults.set(newValue.rawValue, forKey: Keys.speechProviderKind) }
-    }
-
-    public var azureEndpoint: String {
-        get { defaults.string(forKey: Keys.azureEndpoint) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.azureEndpoint) }
-    }
-
-    public var azureDeployment: String {
-        get { defaults.string(forKey: Keys.azureDeployment) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.azureDeployment) }
-    }
-
-    public var transcriptionPreset: TranscriptionPreset {
-        get {
-            TranscriptionPreset(rawValue: defaults.string(forKey: Keys.transcriptionPreset) ?? "")
-                ?? .fast
-        }
-        set { defaults.set(newValue.rawValue, forKey: Keys.transcriptionPreset) }
-    }
-
-    public var fastTranscriptionDeployment: String {
-        get { defaults.string(forKey: Keys.fastTranscriptionDeployment) ?? "gpt-4o-mini-transcribe" }
-        set { defaults.set(newValue, forKey: Keys.fastTranscriptionDeployment) }
-    }
-
-    public var accurateTranscriptionDeployment: String {
-        get { defaults.string(forKey: Keys.accurateTranscriptionDeployment) ?? "gpt-4o-transcribe" }
-        set { defaults.set(newValue, forKey: Keys.accurateTranscriptionDeployment) }
-    }
-
-    /// Default supports the gpt-4o-transcribe family (whisper-1 too). The older
-    /// 2024-10-21 GA predates those models and rejects them.
-    public var azureAPIVersion: String {
-        get { defaults.string(forKey: Keys.azureAPIVersion) ?? "2025-03-01-preview" }
-        set { defaults.set(newValue, forKey: Keys.azureAPIVersion) }
-    }
-
-    public var compatibleEndpoint: String {
-        get { defaults.string(forKey: Keys.compatibleEndpoint) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.compatibleEndpoint) }
-    }
-
-    public var compatibleModel: String {
-        get { defaults.string(forKey: Keys.compatibleModel) ?? "whisper-1" }
-        set { defaults.set(newValue, forKey: Keys.compatibleModel) }
     }
 
     public var languagePin: LanguagePin {
@@ -168,13 +93,8 @@ public final class AppSettings {
         set { defaults.set(newValue, forKey: Keys.languageSwitchKeycode) }
     }
 
-    /// Azure GPT deployment used for smart formatting. Spec section 3.6.
-    public var gptDeployment: String {
-        get { defaults.string(forKey: Keys.gptDeployment) ?? "" }
-        set { defaults.set(newValue, forKey: Keys.gptDeployment) }
-    }
-
-    /// Smart formatting on/off. Spec section 8 default: on.
+    /// Auto-format the transcript. Maps to Deepgram's `smart_format` (punctuation,
+    /// capitalization, formatted numbers and dates). Default: on.
     public var formattingEnabled: Bool {
         get { defaults.object(forKey: Keys.formattingEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.formattingEnabled) }
@@ -184,27 +104,6 @@ public final class AppSettings {
     public var soundEffectsEnabled: Bool {
         get { defaults.object(forKey: Keys.soundEffectsEnabled) as? Bool ?? true }
         set { defaults.set(newValue, forKey: Keys.soundEffectsEnabled) }
-    }
-
-    /// Editable speaker-context line fed to the formatter. Spec section 4.
-    public var speakerContext: String {
-        get {
-            defaults.string(forKey: Keys.speakerContext) ??
-            "The speaker is an AI specialist and founder; dictations are usually about AI engineering and dev tooling. Resolve ambiguous words toward that domain (\"cloud code\" means \"Claude Code\", \"codecs\" means \"Codex\")."
-        }
-        set { defaults.set(newValue, forKey: Keys.speakerContext) }
-    }
-
-    // MARK: - Cost meter rates (spec section 7)
-
-    public var transcriptionRatePerMinute: Double {
-        get { defaults.object(forKey: Keys.transcriptionRatePerMinute) as? Double ?? 0.006 }
-        set { defaults.set(newValue, forKey: Keys.transcriptionRatePerMinute) }
-    }
-
-    public var formatterRatePer1kChars: Double {
-        get { defaults.object(forKey: Keys.formatterRatePer1kChars) as? Double ?? 0.002 }
-        set { defaults.set(newValue, forKey: Keys.formatterRatePer1kChars) }
     }
 
     public var lastExportFolder: String {
